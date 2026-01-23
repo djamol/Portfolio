@@ -1,0 +1,124 @@
+const mysql = require('mysql2/promise');
+require('dotenv').config();
+
+const dbConfig = {
+  host: process.env.DB_HOST || 'localhost',
+  user: process.env.DB_USER || 'root',
+  password: process.env.DB_PASSWORD || '',
+  database: process.env.DB_NAME || 'portfolio_db',
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0
+};
+
+let pool;
+
+const getPool = () => {
+  if (!pool) {
+    pool = mysql.createPool(dbConfig);
+  }
+  return pool;
+};
+
+const initializeDatabase = async () => {
+  try {
+    // First, create database if it doesn't exist
+    const connection = await mysql.createConnection({
+      host: dbConfig.host,
+      user: dbConfig.user,
+      password: dbConfig.password
+    });
+
+    await connection.query(`CREATE DATABASE IF NOT EXISTS ${dbConfig.database}`);
+    await connection.end();
+
+    // Now create the pool with the database
+    pool = mysql.createPool(dbConfig);
+
+    // Create tables
+    await createTables();
+    console.log('Database initialized successfully');
+  } catch (error) {
+    console.error('Database initialization error:', error);
+    throw error;
+  }
+};
+
+const createTables = async () => {
+  const connection = await pool.getConnection();
+  
+  try {
+    // Investments table
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS investments (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        website_app_name VARCHAR(255) NOT NULL,
+        investment_type ENUM('FD', 'Stock', 'ETF', 'Bond', 'Mutual Fund', 'Crypto', 'PPF', 'Saving Bank Balance') NOT NULL,
+        sub_type_name VARCHAR(255),
+        sub_type_category VARCHAR(255),
+        amount DECIMAL(15, 2) NOT NULL,
+        investment_date DATE NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_investment_type (investment_type),
+        INDEX idx_investment_date (investment_date),
+        INDEX idx_website_app (website_app_name)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+
+    // Investment history for tracking changes
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS investment_history (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        investment_id INT NOT NULL,
+        amount DECIMAL(15, 2) NOT NULL,
+        change_date DATE NOT NULL,
+        change_type ENUM('added', 'removed', 'updated') NOT NULL,
+        notes TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (investment_id) REFERENCES investments(id) ON DELETE CASCADE,
+        INDEX idx_investment_id (investment_id),
+        INDEX idx_change_date (change_date)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+
+    // Sub-type names (e.g., MF house names, Bank names)
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS sub_type_names (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(255) NOT NULL UNIQUE,
+        investment_type ENUM('FD', 'Stock', 'ETF', 'Bond', 'Mutual Fund', 'Crypto', 'PPF', 'Saving Bank Balance') NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_investment_type (investment_type),
+        INDEX idx_name (name)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+
+    // Sub-type categories (e.g., Nifty 50, Large Cap, etc.)
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS sub_type_categories (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        category VARCHAR(255) NOT NULL,
+        sub_type_name_id INT,
+        investment_type ENUM('FD', 'Stock', 'ETF', 'Bond', 'Mutual Fund', 'Crypto', 'PPF', 'Saving Bank Balance') NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (sub_type_name_id) REFERENCES sub_type_names(id) ON DELETE SET NULL,
+        INDEX idx_investment_type (investment_type),
+        INDEX idx_sub_type_name_id (sub_type_name_id),
+        UNIQUE KEY unique_category_subtype (category, sub_type_name_id, investment_type)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+
+    console.log('Tables created successfully');
+  } catch (error) {
+    console.error('Error creating tables:', error);
+    throw error;
+  } finally {
+    connection.release();
+  }
+};
+
+module.exports = {
+  getPool,
+  initializeDatabase
+};

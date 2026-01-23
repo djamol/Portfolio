@@ -1,0 +1,103 @@
+<div class="card">
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <h2 style="margin: 0;">Portfolio Analytics</h2>
+    <a routerLink="/investments" class="btn btn-primary">Back to Investments</a>
+  </div>
+
+  <div *ngIf="errorMessage" style="background: #fee; color: #c33; padding: 12px; border-radius: 6px; margin-bottom: 20px;">
+    <strong>Error:</strong> {{ errorMessage }}<br>
+    <small>Make sure the backend server is running on http://localhost:3000</small>
+  </div>
+
+  <div class="stats-grid">
+    <div class="stat-card">
+      <h3>Total Portfolio Value</h3>
+      <div class="value">₹{{ totalAmount | number:'1.2-2' }}</div>
+    </div>
+    <div class="stat-card">
+      <h3>Total Investments</h3>
+      <div class="value">{{ totalInvestments }}</div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top: 20px;">
+    <h3>Investments by Type</h3>
+    <div *ngIf="byTypeChartData.labels && byTypeChartData.labels.length > 0" class="chart-container">
+      <canvas baseChart
+        [data]="byTypeChartData"
+        [options]="barChartOptions"
+        [type]="'bar'">
+      </canvas>
+    </div>
+    <div *ngIf="!byTypeChartData.labels || byTypeChartData.labels.length === 0" style="text-align: center; padding: 40px; color: #6b7280;">
+      <p>No data available</p>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top: 20px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+      <h3>Investments Trend</h3>
+      <select [(ngModel)]="selectedTimeChartOption" (change)="onTimeChartOptionChange()" class="chart-select">
+        <option value="month">By Month</option>
+        <option value="year">By Year</option>
+      </select>
+    </div>
+    <div *ngIf="timeChartData.labels && timeChartData.labels.length > 0" class="chart-container">
+      <canvas baseChart
+        [data]="timeChartData"
+        [options]="lineChartOptions"
+        [type]="'line'">
+      </canvas>
+    </div>
+    <div *ngIf="!timeChartData.labels || timeChartData.labels.length === 0" style="text-align: center; padding: 40px; color: #6b7280;">
+      <p>No data available</p>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top: 20px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+      <h3>Investments Distribution</h3>
+      <select [(ngModel)]="selectedPieChartOption" (change)="onPieChartOptionChange()" class="chart-select">
+        <option value="platform">By Platform</option>
+        <option value="type">By Investment Type</option>
+        <option value="subcategory">By Sub Category</option>
+        <option value="category">By Category</option>
+      </select>
+    </div>
+    <div *ngIf="pieChartData.labels && pieChartData.labels.length > 0" class="chart-container">
+      <canvas baseChart
+        [data]="pieChartData"
+        [options]="pieChartOptions"
+        [type]="'pie'">
+      </canvas>
+    </div>
+    <div *ngIf="!pieChartData.labels || pieChartData.labels.length === 0" style="text-align: center; padding: 40px; color: #6b7280;">
+      <p>No data available</p>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top: 20px;">
+    <h3>Monthly Changes (Added vs Removed)</h3>
+    <div *ngIf="monthlyChangesChartData.labels && monthlyChangesChartData.labels.length > 0" class="chart-container">
+      <canvas baseChart
+        [data]="monthlyChangesChartData"
+        [options]="lineChartOptions"
+        [type]="'line'">
+      </canvas>
+    </div>
+    <div *ngIf="!monthlyChangesChartData.labels || monthlyChangesChartData.labels.length === 0" style="text-align: center; padding: 40px; color: #6b7280;">
+      <p>No data available</p>
+    </div>
+  </div>
+
+  <!-- Link to Investment Summary Page -->
+  <div class="card" style="margin-top: 20px; text-align: center;">
+    <h3>Detailed Investment Summary</h3>
+    <p>View detailed investment information with search, sort, and filter capabilities</p>
+    <a routerLink="/investment-summary" class="btn btn-secondary">View Investment Summary</a>
+  </div>
+
+  <div *ngIf="loading" style="text-align: center; padding: 40px;">
+    <p>Loading analytics...</p>
+  </div>
+</div>

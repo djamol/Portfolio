@@ -1,0 +1,93 @@
+<div class="investment-summary-container">
+  <h2>Investment Summary</h2>
+  
+  <div *ngIf="errorMessage" class="error-message">
+    <strong>Error:</strong> {{ errorMessage }}<br>
+    <small>Make sure the backend server is running on http://localhost:3000</small>
+  </div>
+
+  <div class="controls-section">
+    <!-- Search Input -->
+    <div class="search-box">
+      <input 
+        type="text" 
+        placeholder="Search investments..." 
+        [(ngModel)]="searchTerm" 
+        (input)="onSearchChange()"
+        class="search-input">
+    </div>
+
+    <!-- Filters -->
+    <div class="filters-row">
+      <select [(ngModel)]="selectedType" (change)="onFilterChange()" class="filter-select">
+        <option value="">All Types</option>
+        <option *ngFor="let type of investmentTypes" [value]="type">{{ type }}</option>
+      </select>
+
+      <select [(ngModel)]="selectedPlatform" (change)="onFilterChange()" class="filter-select">
+        <option value="">All Platforms</option>
+        <option *ngFor="let platform of platforms" [value]="platform">{{ platform }}</option>
+      </select>
+
+      <select [(ngModel)]="selectedCategory" (change)="onFilterChange()" class="filter-select">
+        <option value="">All Categories</option>
+        <option *ngFor="let category of categories" [value]="category">{{ category }}</option>
+      </select>
+
+      <button (click)="clearFilters()" class="clear-btn">Clear Filters</button>
+    </div>
+  </div>
+
+  <!-- Loading indicator -->
+  <div *ngIf="loading" class="loading">
+    Loading investment summary...
+  </div>
+
+  <!-- Results Info -->
+  <div class="results-info" *ngIf="!loading">
+    Showing {{ filteredData.length }} of {{ summaryData.length }} investments
+  </div>
+
+  <!-- Table -->
+  <div class="table-container" *ngIf="!loading && filteredData.length > 0">
+    <table class="investment-table">
+      <thead>
+        <tr>
+          <th (click)="onSort('website_app_name')" class="sortable">
+            Platform <span class="sort-icon">{{ getSortIcon('website_app_name') }}</span>
+          </th>
+          <th (click)="onSort('investment_type')" class="sortable">
+            Type <span class="sort-icon">{{ getSortIcon('investment_type') }}</span>
+          </th>
+          <th (click)="onSort('sub_type_name')" class="sortable">
+            Sub Type <span class="sort-icon">{{ getSortIcon('sub_type_name') }}</span>
+          </th>
+          <th (click)="onSort('sub_type_category')" class="sortable">
+            Category <span class="sort-icon">{{ getSortIcon('sub_type_category') }}</span>
+          </th>
+          <th (click)="onSort('amount')" class="sortable">
+            Amount (₹) <span class="sort-icon">{{ getSortIcon('amount') }}</span>
+          </th>
+          <th (click)="onSort('investment_date')" class="sortable">
+            Date <span class="sort-icon">{{ getSortIcon('investment_date') }}</span>
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr *ngFor="let item of filteredData; let i = index" [class.even-row]="i % 2 === 0" [class.odd-row]="i % 2 !== 0">
+          <td>{{ item.website_app_name }}</td>
+          <td>{{ item.investment_type }}</td>
+          <td>{{ item.sub_type_name || '-' }}</td>
+          <td>{{ item.sub_type_category || '-' }}</td>
+          <td>{{ item.amount | number:'1.2-2' }}</td>
+          <td>{{ formatDate(item.investment_date) }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Empty State -->
+  <div class="empty-state" *ngIf="!loading && filteredData.length === 0">
+    <p>No investments found matching your criteria.</p>
+  </div>
+</div>

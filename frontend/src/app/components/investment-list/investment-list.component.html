@@ -1,0 +1,191 @@
+<div class="card">
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+    <h2 style="margin: 0;">Investment Portfolio</h2>
+    <div>
+      <button class="btn btn-primary" (click)="openModal()" style="margin-right: 10px;">+ Add Investment</button>
+      <a routerLink="/analytics" class="btn btn-secondary">View Analytics</a>
+    </div>
+  </div>
+
+  <table class="table" *ngIf="investments.length > 0">
+    <thead>
+      <tr>
+        <th>Platform</th>
+        <th>Type</th>
+        <th>Sub Type</th>
+        <th>Category</th>
+        <th>Amount</th>
+        <th>Date</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr *ngFor="let investment of investments">
+        <td>{{ investment.website_app_name }}</td>
+        <td><span class="badge badge-primary">{{ investment.investment_type }}</span></td>
+        <td>{{ investment.sub_type_name || '-' }}</td>
+        <td>{{ investment.sub_type_category || '-' }}</td>
+        <td><strong>₹{{ investment.amount | number:'1.2-2' }}</strong></td>
+        <td>{{ investment.investment_date | date:'shortDate' }}</td>
+        <td>
+          <button class="btn btn-secondary" (click)="editInvestment(investment)" style="margin-right: 5px; padding: 5px 10px; font-size: 12px;">Edit</button>
+          <button class="btn btn-danger" (click)="deleteInvestment(investment.id!)" style="padding: 5px 10px; font-size: 12px;">Delete</button>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div *ngIf="investments.length === 0 && !loading" style="text-align: center; padding: 40px; color: #6b7280;">
+    <p>No investments found. Click "Add Investment" to get started.</p>
+  </div>
+
+  <div *ngIf="loading" style="text-align: center; padding: 40px;">
+    <p>Loading...</p>
+  </div>
+</div>
+
+<!-- Investment Modal -->
+<div class="modal" [class.show]="showModal" (click)="closeModalOnBackdrop($event)">
+  <div class="modal-content" (click)="$event.stopPropagation()" style="max-width: 600px;">
+    <div class="modal-header">
+      <h2>{{ editingInvestment ? 'Edit Investment' : 'Add New Investment' }}</h2>
+      <button class="close" (click)="closeModal()">&times;</button>
+    </div>
+    <form (ngSubmit)="saveInvestment()">
+      <div class="form-group">
+        <label>Platform/Website/App Name *</label>
+        <input type="text" [(ngModel)]="currentInvestment.website_app_name" name="website_app_name" required>
+      </div>
+      <div class="form-group">
+        <label>Investment Type *</label>
+        <select [(ngModel)]="currentInvestment.investment_type" name="investment_type" 
+                (change)="onInvestmentTypeChange()" required>
+          <option value="">Select Type</option>
+          <option value="FD">Fixed Deposit (FD)</option>
+          <option value="Stock">Stock</option>
+          <option value="ETF">ETF</option>
+          <option value="Bond">Bond</option>
+          <option value="Mutual Fund">Mutual Fund</option>
+          <option value="Crypto">Crypto</option>
+          <option value="PPF">PPF</option>
+          <option value="Saving Bank Balance">Saving Bank Balance</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Sub Type Name (e.g., MF House Name)</label>
+        <div style="display: flex; gap: 8px;">
+          <select [(ngModel)]="selectedSubTypeNameId" name="sub_type_name" 
+                  (change)="onSubTypeNameChange()" 
+                  style="flex: 1;">
+            <option [value]="null">Select or Add New</option>
+            <option *ngFor="let subType of subTypeNames" [value]="subType.id">
+              {{ subType.name }}
+            </option>
+            <option value="__NEW__">+ Add New Sub Type</option>
+          </select>
+        </div>
+        <input *ngIf="showNewSubTypeInput" type="text" 
+               [(ngModel)]="newSubTypeName" 
+               name="new_sub_type_name"
+               placeholder="Enter new sub type name"
+               style="margin-top: 8px;">
+      </div>
+      <div class="form-group">
+        <label>Sub Type Category (e.g., MF Type)</label>
+        <div style="display: flex; gap: 8px;">
+          <select [(ngModel)]="selectedCategoryId" name="sub_type_category" 
+                  (change)="onCategoryChange()"
+                  style="flex: 1;">
+            <option [value]="null">Select or Add New</option>
+            <option *ngFor="let category of categories" [value]="category.id">
+              {{ category.category }}
+            </option>
+            <option value="__NEW__">+ Add New Category</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Amount (₹) *</label>
+        <input type="number" step="0.01" [(ngModel)]="currentInvestment.amount" name="amount" required min="0">
+      </div>
+      <div class="form-group">
+        <label>Investment Date *</label>
+        <input type="date" [(ngModel)]="currentInvestment.investment_date" name="investment_date" required>
+      </div>
+      <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
+        <button type="button" class="btn btn-secondary" (click)="closeModal()">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Add New Sub Type Modal -->
+<div class="modal" [class.show]="showSubTypeModal" (click)="closeSubTypeModalOnBackdrop($event)">
+  <div class="modal-content" (click)="$event.stopPropagation()" style="max-width: 400px;">
+    <div class="modal-header">
+      <h2>Add New Sub Type</h2>
+      <button class="close" (click)="closeSubTypeModal()">&times;</button>
+    </div>
+    <form (ngSubmit)="saveNewSubType()">
+      <div class="form-group">
+        <label>Sub Type Name *</label>
+        <input type="text" [(ngModel)]="newSubTypeName" name="new_sub_type_name" required>
+      </div>
+      <div class="form-group">
+        <label>Investment Type *</label>
+        <select [(ngModel)]="currentInvestment.investment_type" name="investment_type" required>
+          <option value="">Select Type</option>
+          <option value="FD">Fixed Deposit (FD)</option>
+          <option value="Stock">Stock</option>
+          <option value="ETF">ETF</option>
+          <option value="Bond">Bond</option>
+          <option value="Mutual Fund">Mutual Fund</option>
+          <option value="Crypto">Crypto</option>
+          <option value="PPF">PPF</option>
+          <option value="Saving Bank Balance">Saving Bank Balance</option>
+        </select>
+      </div>
+      <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
+        <button type="button" class="btn btn-secondary" (click)="closeSubTypeModal()">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Add New Category Modal -->
+<div class="modal" [class.show]="showCategoryModal" (click)="closeCategoryModalOnBackdrop($event)">
+  <div class="modal-content" (click)="$event.stopPropagation()" style="max-width: 400px;">
+    <div class="modal-header">
+      <h2>Add New Category</h2>
+      <button class="close" (click)="closeCategoryModal()">&times;</button>
+    </div>
+    <form (ngSubmit)="saveNewCategory()">
+      <div class="form-group">
+        <label>Category Name *</label>
+        <input type="text" [(ngModel)]="newCategory" name="new_category" required>
+      </div>
+      <div class="form-group">
+        <label>Investment Type *</label>
+        <div class="form-group">
+          <select [(ngModel)]="currentInvestment.investment_type" name="investment_type" required>
+            <option value="">Select Type</option>
+            <option value="FD">Fixed Deposit (FD)</option>
+            <option value="Stock">Stock</option>
+            <option value="ETF">ETF</option>
+            <option value="Bond">Bond</option>
+            <option value="Mutual Fund">Mutual Fund</option>
+            <option value="Crypto">Crypto</option>
+            <option value="PPF">PPF</option>
+            <option value="Saving Bank Balance">Saving Bank Balance</option>
+          </select>
+        </div>
+      </div>
+      <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px;">
+        <button type="button" class="btn btn-secondary" (click)="closeCategoryModal()">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
