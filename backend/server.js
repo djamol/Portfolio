@@ -4,6 +4,7 @@ const db = require('./config/database');
 const investmentRoutes = require('./routes/investments');
 const analyticsRoutes = require('./routes/analytics');
 const categoriesRoutes = require('./routes/categories');
+const portfolioRoutes = require('./routes/portfolio');
 
 const app = express();
 const PORT = process.env.PORT || 3000; // 
@@ -15,6 +16,7 @@ app.use(express.json());
 app.use('/api/investments', investmentRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/categories', categoriesRoutes);
+app.use('/api/portfolio', portfolioRoutes);
 
 // Root endpoint
 app.get('/', (req, res) => {
