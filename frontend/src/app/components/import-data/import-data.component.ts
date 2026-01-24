@@ -25,6 +25,15 @@ export class ImportDataComponent implements OnInit {
   existingSchemeCategories: Set<string> = new Set();
   hasNewAMC = false; // Flag to indicate if there are new AMCs
   hasNewScheme = false; // Flag to indicate if there are new schemes
+  
+  // Optional date selection
+  useCustomDate = false;
+  customDate: string = new Date().toISOString().split('T')[0]; // Default to today's date
+  
+  // Method to reset custom date to today when checkbox is toggled
+  resetCustomDate() {
+    this.customDate = new Date().toISOString().split('T')[0];
+  }
 
   // Comprehensive list of AMC names - Order matters: longer names first
   private amcs = [
@@ -453,7 +462,7 @@ export class ImportDataComponent implements OnInit {
     const updatedInvestment = {
       ...investment,
       amount: newValue,
-      investment_date: new Date().toISOString().split('T')[0],
+      investment_date: this.useCustomDate ? this.customDate : new Date().toISOString().split('T')[0],
       notes: investment.notes || `Updated via import on ${new Date().toLocaleDateString()} - Total aggregated value from CSV`
     };
 
@@ -472,7 +481,7 @@ export class ImportDataComponent implements OnInit {
       sub_type_name: record.subTypeName,
       sub_type_category: record.subTypeCategory,
       amount: record.presentValue,
-      investment_date: new Date().toISOString().split('T')[0],
+      investment_date: this.useCustomDate ? this.customDate : new Date().toISOString().split('T')[0],
       notes: `Imported from CSV on ${new Date().toLocaleDateString()} - Aggregated value from ${record.count || 1} folio${(record.count || 1) > 1 ? 's' : ''}: ${record.folioNo}`
     };
 
