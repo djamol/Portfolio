@@ -165,6 +165,7 @@
               id="investment_type"
               name="investment_type"
               [(ngModel)]="currentInvestment.investment_type"
+              (ngModelChange)="onInvestmentTypeChange()"
               class="form-control"
               required>
               <option value="">Select Investment Type</option>
@@ -172,26 +173,96 @@
             </select>
           </div>
 
-          <div class="form-group">
-            <label for="sub_type_name">Sub Type Name</label>
-            <input
-              type="text"
-              id="sub_type_name"
-              name="sub_type_name"
-              [(ngModel)]="currentInvestment.sub_type_name"
-              class="form-control"
-              placeholder="e.g., SBI Bluechip Fund, Reliance ETF">
+          <div class="form-group" *ngIf="investmentSubTypes.length > 0">
+            <label for="sub_type_name">Sub Type Name *</label>
+            <div class="input-with-add">
+              <select
+                id="sub_type_name"
+                name="sub_type_name"
+                [(ngModel)]="currentInvestment.sub_type_name"
+                class="form-control"
+                required>
+                <option value="">Select Sub Type</option>
+                <option *ngFor="let subType of investmentSubTypes" [value]="subType">{{ subType }}</option>
+              </select>
+              <button type="button" class="add-new-btn" (click)="toggleNewSubType()" title="Add New Sub Type">
+                +
+              </button>
+            </div>
+            
+            <div *ngIf="showNewSubTypeInput" class="new-input-container">
+              <input
+                type="text"
+                [(ngModel)]="newSubType"
+                name="new_sub_type"
+                class="form-control"
+                placeholder="Enter new sub type name"
+                (keyup.enter)="addNewSubType()">
+              <div class="new-input-buttons">
+                <button type="button" class="btn btn-sm btn-success" (click)="addNewSubType()">Add</button>
+                <button type="button" class="btn btn-sm btn-secondary" (click)="toggleNewSubType()">Cancel</button>
+              </div>
+            </div>
           </div>
 
-          <div class="form-group">
-            <label for="sub_type_category">Sub Type Category</label>
-            <input
-              type="text"
-              id="sub_type_category"
-              name="sub_type_category"
-              [(ngModel)]="currentInvestment.sub_type_category"
-              class="form-control"
-              placeholder="e.g., Large Cap, Nifty 50, Banking Sector">
+          <div class="form-group" *ngIf="currentInvestment.investment_type && investmentSubTypes.length === 0">
+            <label for="sub_type_name">Sub Type Name *</label>
+            <div class="input-with-add">
+              <input
+                type="text"
+                id="sub_type_name"
+                name="sub_type_name"
+                [(ngModel)]="currentInvestment.sub_type_name"
+                class="form-control"
+                required
+                placeholder="e.g., SBI Bluechip Fund, Reliance ETF">
+            </div>
+          </div>
+
+          <div class="form-group" *ngIf="investmentCategories.length > 0">
+            <label for="sub_type_category">Sub Type Category *</label>
+            <div class="input-with-add">
+              <select
+                id="sub_type_category"
+                name="sub_type_category"
+                [(ngModel)]="currentInvestment.sub_type_category"
+                class="form-control"
+                required>
+                <option value="">Select Category</option>
+                <option *ngFor="let category of investmentCategories" [value]="category">{{ category }}</option>
+              </select>
+              <button type="button" class="add-new-btn" (click)="toggleNewCategory()" title="Add New Category">
+                +
+              </button>
+            </div>
+            
+            <div *ngIf="showNewCategoryInput" class="new-input-container">
+              <input
+                type="text"
+                [(ngModel)]="newCategory"
+                name="new_category"
+                class="form-control"
+                placeholder="Enter new category"
+                (keyup.enter)="addNewCategory()">
+              <div class="new-input-buttons">
+                <button type="button" class="btn btn-sm btn-success" (click)="addNewCategory()">Add</button>
+                <button type="button" class="btn btn-sm btn-secondary" (click)="toggleNewCategory()">Cancel</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-group" *ngIf="currentInvestment.investment_type && investmentCategories.length === 0">
+            <label for="sub_type_category">Sub Type Category *</label>
+            <div class="input-with-add">
+              <input
+                type="text"
+                id="sub_type_category"
+                name="sub_type_category"
+                [(ngModel)]="currentInvestment.sub_type_category"
+                class="form-control"
+                required
+                placeholder="e.g., Large Cap, Nifty 50, Banking Sector">
+            </div>
           </div>
 
           <div class="form-group">
