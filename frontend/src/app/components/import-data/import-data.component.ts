@@ -40,6 +40,7 @@ export class ImportDataComponent implements OnInit {
   private amcs = [
     // Longest names first
     'Aditya Birla Sun Life', 
+    'Bandhan Mutual Fund',
     'Bank of India', 
     'ICICI Prudential', 
     'Kotak Mahindra', 
@@ -74,6 +75,8 @@ export class ImportDataComponent implements OnInit {
     'IIFL', 
     'L&T',
     'WhiteOak Capital',
+    'Bandhan MF',
+    'Bandhan',
     'HSBC', 
     'ICICI', 
     'Nippon', 
@@ -89,7 +92,7 @@ export class ImportDataComponent implements OnInit {
     'Bajaj',
     'Mahindra',
     'BlackRock', 
-    'Templeton',
+    'Templeton', 
     
     // Short names - these should be last to avoid false positives
     'Taurus', 
@@ -316,6 +319,7 @@ export class ImportDataComponent implements OnInit {
     const fundColIndex = headers.findIndex(h => h.toLowerCase().includes('fund'));
     const schemeColIndex = headers.findIndex(h => h.toLowerCase().includes('scheme'));
     const valueAtCostColIndex = headers.findIndex(h => h.toLowerCase().includes('value at cost'));
+    const profitLossColIndex = headers.findIndex(h => h.toLowerCase().includes('profit/ loss'));
     const categoryColIndex = headers.findIndex(h => h.toLowerCase().includes('category'));
     const subCategoryColIndex = headers.findIndex(h => h.toLowerCase().includes('sub category'));
     
@@ -329,16 +333,39 @@ export class ImportDataComponent implements OnInit {
       // Check if we have enough fields and the required fields exist
       if (fields.length > Math.max(fundColIndex, schemeColIndex, valueAtCostColIndex) &&
           fields[schemeColIndex] && 
-          fields[valueAtCostColIndex]) {
+          (fields[valueAtCostColIndex] || fields[profitLossColIndex])) {
         
         const schemeName = fields[schemeColIndex]?.trim();
         const valueAtCost = fields[valueAtCostColIndex]?.trim();
+        const profitLoss = profitLossColIndex >= 0 ? fields[profitLossColIndex]?.trim() : '0';
         const fundHouse = fundColIndex >= 0 ? fields[fundColIndex]?.trim() : '';
         const category = categoryColIndex >= 0 ? fields[categoryColIndex]?.trim() : '';
         const subCategory = subCategoryColIndex >= 0 ? fields[subCategoryColIndex]?.trim() : '';
 
-        // Skip if value at cost is not a number or if scheme name is empty
-        if (!schemeName || !valueAtCost || isNaN(parseFloat(valueAtCost))) {
+        // Skip if scheme name is empty
+        if (!schemeName) {
+          continue;
+        }
+
+        // Calculate present value as sum of value at cost and profit/loss
+        let valueAtCostNum = 0;
+        let profitLossNum = 0;
+        
+        if (valueAtCost) {
+          // Remove commas and convert to number
+          valueAtCostNum = parseFloat(valueAtCost.replace(/,/g, ''));
+        }
+        
+        if (profitLoss) {
+          // Remove commas and convert to number
+          profitLossNum = parseFloat(profitLoss.replace(/,/g, ''));
+        }
+        
+        // Calculate present value as sum of value at cost and profit/loss
+        const presentValue = valueAtCostNum + profitLossNum;
+
+        // Skip if present value calculation results in NaN or zero
+        if (isNaN(presentValue) || presentValue <= 0) {
           continue;
         }
 
@@ -349,7 +376,7 @@ export class ImportDataComponent implements OnInit {
           folioNo: '', // No folio number in this format
           originalSchemeName: schemeName,
           schemeName: schemeName,
-          presentValue: parseFloat(valueAtCost),
+          presentValue: presentValue,
           subTypeName: amcName || fundHouse || 'Unknown AMC', // Use fund house if AMC not found
           subTypeCategory: schemeNameWithoutAMC || subCategory || category || 'Uncategorized' // Prioritize extracted scheme name
         });
