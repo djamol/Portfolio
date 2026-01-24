@@ -3,6 +3,7 @@ const cors = require('cors');
 const db = require('./config/database');
 const investmentRoutes = require('./routes/investments');
 const analyticsRoutes = require('./routes/analytics');
+const categoriesRoutes = require('./routes/categories');
 
 const app = express();
 const PORT = process.env.PORT || 3000; // Changed back to 3000
@@ -13,6 +14,7 @@ app.use(express.json());
 // Routes
 app.use('/api/investments', investmentRoutes);
 app.use('/api/analytics', analyticsRoutes);
+app.use('/api/categories', categoriesRoutes);
 
 // Root endpoint
 app.get('/', (req, res) => {

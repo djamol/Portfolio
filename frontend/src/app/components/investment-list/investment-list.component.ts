@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
 import { InvestmentService } from '../../services/investment.service';
 import { AnalyticsService } from '../../services/analytics.service';
+import { INVESTMENT_TYPES } from '../../constants/investment-types.constants';
 
 @Component({
   selector: 'app-investment-list',
@@ -31,7 +32,7 @@ export class InvestmentListComponent implements OnInit {
   paginatedData: any[] = [];
 
   // Unique values for filters
-  investmentTypes: string[] = [];
+  investmentTypes: string[] = INVESTMENT_TYPES;
   platforms: string[] = [];
 
   // Modal properties
@@ -91,9 +92,9 @@ export class InvestmentListComponent implements OnInit {
   }
 
   extractFilterOptions() {
-    // Extract unique investment types
-    this.investmentTypes = [...new Set(this.investments.map(item => item.investment_type))].filter(Boolean);
-
+    // Use predefined investment types instead of extracting from data
+    // this.investmentTypes is already set to INVESTMENT_TYPES
+      
     // Extract unique platforms
     this.platforms = [...new Set(this.investments.map(item => item.website_app_name))].filter(Boolean);
   }
