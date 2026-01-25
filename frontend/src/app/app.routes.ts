@@ -5,14 +5,17 @@ import { InvestmentSummaryComponent } from './components/investment-summary/inve
 import { InvestmentFormComponent } from './components/investment-form/investment-form.component';
 import { ImportDataComponent } from './components/import-data/import-data.component';
 import { ImportExportComponent } from './components/import-export/import-export.component';
+import { LoginComponent } from './components/login/login.component';
+import { authGuard } from './guards/auth.guard';
 
 export const routes: Routes = [
-  { path: '', redirectTo: '/investments', pathMatch: 'full' },
-  { path: 'investments', component: InvestmentListComponent },
-  { path: 'investments/new', component: InvestmentFormComponent },
-  { path: 'investments/edit/:id', component: InvestmentFormComponent },
-  { path: 'analytics', component: AnalyticsComponent },
-  { path: 'investment-summary', component: InvestmentSummaryComponent },
-  { path: 'import-data', component: ImportDataComponent },
-  { path: 'import-export', component: ImportExportComponent }
+  { path: '', redirectTo: '/login', pathMatch: 'full' },
+  { path: 'login', component: LoginComponent },
+  { path: 'investments', component: InvestmentListComponent, canActivate: [authGuard] },
+  { path: 'investments/new', component: InvestmentFormComponent, canActivate: [authGuard] },
+  { path: 'investments/edit/:id', component: InvestmentFormComponent, canActivate: [authGuard] },
+  { path: 'analytics', component: AnalyticsComponent, canActivate: [authGuard] },
+  { path: 'investment-summary', component: InvestmentSummaryComponent, canActivate: [authGuard] },
+  { path: 'import-data', component: ImportDataComponent, canActivate: [authGuard] },
+  { path: 'import-export', component: ImportExportComponent, canActivate: [authGuard] }
 ];

@@ -1,0 +1,61 @@
+<div class="login-container">
+  <div class="login-card">
+    <h2>Investment Tracker Login</h2>
+    
+    <form (ngSubmit)="login()" #loginForm="ngForm">
+      <div class="form-group">
+        <label for="apiDomain">Backend API Domain:</label>
+        <input 
+          type="text" 
+          id="apiDomain" 
+          [(ngModel)]="apiDomain" 
+          name="apiDomain" 
+          class="form-control"
+          placeholder="http://localhost:3000"
+          required>
+      </div>
+      
+      <div class="form-group">
+        <label for="username">Username:</label>
+        <input 
+          type="text" 
+          id="username" 
+          [(ngModel)]="username" 
+          name="username" 
+          class="form-control"
+          placeholder="Enter username"
+          required>
+      </div>
+      
+      <div class="form-group">
+        <label for="password">Password:</label>
+        <input 
+          type="password" 
+          id="password" 
+          [(ngModel)]="password" 
+          name="password" 
+          class="form-control"
+          placeholder="Enter password"
+          required>
+      </div>
+      
+      <div *ngIf="errorMessage" class="error-message">
+        {{ errorMessage }}
+      </div>
+      
+      <button 
+        type="submit" 
+        class="login-btn" 
+        [disabled]="loading || !username || !password || !apiDomain">
+        <span *ngIf="!loading">Login</span>
+        <span *ngIf="loading">Logging in...</span>
+      </button>
+    </form>
+    
+    <div class="login-info">
+      <p><strong>Credentials:</strong></p>
+      <p>Username: <code>demo-user/admin</code></p>
+      <p>Password: <code>admin</code></p>
+    </div>
+  </div>
+</div>

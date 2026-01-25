@@ -17,6 +17,9 @@
       <li class="nav-item">
         <a routerLink="/import-export" routerLinkActive="active" class="nav-link">Import/Export</a>
       </li>
+      <li class="nav-item" *ngIf="authService.isAuthenticated()">
+        <button (click)="logout()" class="logout-btn">Logout</button>
+      </li>
     </ul>
   </div>
 </nav>

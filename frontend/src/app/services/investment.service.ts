@@ -2,8 +2,6 @@ import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable, map } from 'rxjs';
 
-const API_URL = 'http://localhost:3000/api';
-
 interface ApiResponse<T> {
   success: boolean;
   data: T;
@@ -15,16 +13,21 @@ interface ApiResponse<T> {
   providedIn: 'root'
 })
 export class InvestmentService {
+  private getApiUrl(): string {
+    const apiDomain = localStorage.getItem('apiDomain') || 'http://localhost:3000';
+    return `${apiDomain}/api`;
+  }
+  
   constructor(private http: HttpClient) {}
 
   getAll(): Observable<any[]> {
-    return this.http.get<ApiResponse<any[]>>(`${API_URL}/investments`).pipe(
+    return this.http.get<ApiResponse<any[]>>(`${this.getApiUrl()}/investments`).pipe(
       map(response => response.success ? response.data : [])
     );
   }
 
   getByCriteria(platform: string, subTypeName: string, subTypeCategory: string): Observable<any[]> {
-    return this.http.get<ApiResponse<any[]>>(`${API_URL}/investments/search`, {
+    return this.http.get<ApiResponse<any[]>>(`${this.getApiUrl()}/investments/search`, {
       params: {
         website_app_name: platform,
         sub_type_name: subTypeName,
@@ -36,25 +39,25 @@ export class InvestmentService {
   }
 
   getById(id: number): Observable<any> {
-    return this.http.get<ApiResponse<any>>(`${API_URL}/investments/${id}`).pipe(
+    return this.http.get<ApiResponse<any>>(`${this.getApiUrl()}/investments/${id}`).pipe(
       map(response => response.success ? response.data : null)
     );
   }
 
   create(data: any): Observable<any> {
-    return this.http.post<ApiResponse<any>>(`${API_URL}/investments`, data).pipe(
+    return this.http.post<ApiResponse<any>>(`${this.getApiUrl()}/investments`, data).pipe(
       map(response => response.success ? response.data : null)
     );
   }
 
   update(id: number, data: any): Observable<any> {
-    return this.http.put<ApiResponse<any>>(`${API_URL}/investments/${id}`, data).pipe(
+    return this.http.put<ApiResponse<any>>(`${this.getApiUrl()}/investments/${id}`, data).pipe(
       map(response => response.success ? response.data : null)
     );
   }
 
   delete(id: number): Observable<any> {
-    return this.http.delete<ApiResponse<any>>(`${API_URL}/investments/${id}`).pipe(
+    return this.http.delete<ApiResponse<any>>(`${this.getApiUrl()}/investments/${id}`).pipe(
       map(response => response.success ? response.data : null)
     );
   }

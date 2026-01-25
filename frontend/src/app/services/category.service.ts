@@ -20,30 +20,33 @@ export interface Category {
   providedIn: 'root'
 })
 export class CategoryService {
-  private apiUrl = '/api/categories';
-
+  private getApiUrl(): string {
+    const apiDomain = localStorage.getItem('apiDomain') || 'http://localhost:3000';
+    return `${apiDomain}/api/categories`;
+  }
+  
   constructor(private http: HttpClient) {}
 
   // Sub-type names APIs
   getSubTypeNames(): Observable<{ success: boolean; data: SubTypeName[] }> {
-    return this.http.get<{ success: boolean; data: SubTypeName[] }>(`${this.apiUrl}/sub-type-names`);
+    return this.http.get<{ success: boolean; data: SubTypeName[] }>(`${this.getApiUrl()}/sub-type-names`);
   }
 
   getSubTypeNamesByInvestmentType(investmentType: string): Observable<{ success: boolean; data: SubTypeName[] }> {
-    return this.http.get<{ success: boolean; data: SubTypeName[] }>(`${this.apiUrl}/sub-type-names/${investmentType}`);
+    return this.http.get<{ success: boolean; data: SubTypeName[] }>(`${this.getApiUrl()}/sub-type-names/${investmentType}`);
   }
 
   createSubTypeName(subTypeName: SubTypeName): Observable<{ success: boolean; data: SubTypeName }> {
-    return this.http.post<{ success: boolean; data: SubTypeName }>(`${this.apiUrl}/sub-type-names`, subTypeName);
+    return this.http.post<{ success: boolean; data: SubTypeName }>(`${this.getApiUrl()}/sub-type-names`, subTypeName);
   }
 
   deleteSubTypeName(id: number): Observable<{ success: boolean; message: string }> {
-    return this.http.delete<{ success: boolean; message: string }>(`${this.apiUrl}/sub-type-names/${id}`);
+    return this.http.delete<{ success: boolean; message: string }>(`${this.getApiUrl()}/sub-type-names/${id}`);
   }
 
   // Categories APIs
   getAllCategories(): Observable<{ success: boolean; data: Category[] }> {
-    return this.http.get<{ success: boolean; data: Category[] }>(`${this.apiUrl}/categories`);
+    return this.http.get<{ success: boolean; data: Category[] }>(`${this.getApiUrl()}/categories`);
   }
 
   getCategories(investmentType: string, subTypeNameId?: number): Observable<{ success: boolean; data: Category[] }> {
@@ -52,16 +55,16 @@ export class CategoryService {
       return this.getAllCategories();
     }
     const url = subTypeNameId 
-      ? `${this.apiUrl}/categories/${investmentType}/${subTypeNameId}`
-      : `${this.apiUrl}/categories/${investmentType}`;
+      ? `${this.getApiUrl()}/categories/${investmentType}/${subTypeNameId}`
+      : `${this.getApiUrl()}/categories/${investmentType}`;
     return this.http.get<{ success: boolean; data: Category[] }>(url);
   }
 
   createCategory(category: Category): Observable<{ success: boolean; data: Category }> {
-    return this.http.post<{ success: boolean; data: Category }>(`${this.apiUrl}/categories`, category);
+    return this.http.post<{ success: boolean; data: Category }>(`${this.getApiUrl()}/categories`, category);
   }
 
   deleteCategory(id: number): Observable<{ success: boolean; message: string }> {
-    return this.http.delete<{ success: boolean; message: string }>(`${this.apiUrl}/categories/${id}`);
+    return this.http.delete<{ success: boolean; message: string }>(`${this.getApiUrl()}/categories/${id}`);
   }
 }
