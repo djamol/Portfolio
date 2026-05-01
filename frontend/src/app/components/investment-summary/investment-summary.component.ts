@@ -12,6 +12,8 @@ import { AnalyticsService } from '../../services/analytics.service';
 export class InvestmentSummaryComponent implements OnInit {
   summaryData: any[] = [];
   filteredData: any[] = [];
+  /** Sum of amount for all rows matching current filters (not paginated). */
+  filteredTotalAmount = 0;
   loading = false;
   errorMessage = '';
 
@@ -141,6 +143,10 @@ export class InvestmentSummaryComponent implements OnInit {
     });
 
     this.filteredData = result;
+    this.filteredTotalAmount = result.reduce(
+      (sum, item) => sum + (Number(item.amount) || 0),
+      0
+    );
     this.calculatePagination();
     this.updatePaginatedData();
   }

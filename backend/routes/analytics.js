@@ -213,7 +213,16 @@ router.get('/summary-table', async (req, res) => {
         i.investment_type,
         i.sub_type_name,
         i.sub_type_category,
-        i.amount,
+        COALESCE(
+          (
+            SELECT h.amount
+            FROM investment_history h
+            WHERE h.investment_id = i.id
+            ORDER BY h.change_date DESC, h.id DESC
+            LIMIT 1
+          ),
+          i.amount
+        ) AS amount,
         i.investment_date,
         i.notes,
         COALESCE(h.history_count, 0) as history_count
@@ -225,7 +234,7 @@ router.get('/summary-table', async (req, res) => {
         FROM investment_history
         GROUP BY investment_id
       ) h ON i.id = h.investment_id
-      ORDER BY i.amount DESC
+      ORDER BY amount DESC
     `);
     res.json({ success: true, data: rows });
   } catch (error) {
@@ -249,7 +258,7 @@ router.get('/investment-history/:id', async (req, res) => {
         notes
       FROM investment_history
       WHERE investment_id = ?
-      ORDER BY change_date DESC
+      ORDER BY change_date DESC, id DESC
     `, [investmentId]);
     res.json({ success: true, data: rows });
   } catch (error) {

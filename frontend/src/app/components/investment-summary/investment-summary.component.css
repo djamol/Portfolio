@@ -42,10 +42,55 @@
 
 .filters-row {
   display: flex;
+  flex-wrap: wrap;
   gap: 15px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 15px;
+}
+
+.filters-selects-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 15px;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+}
+
+.filters-toolbar-right {
+  display: flex;
   flex-wrap: wrap;
   align-items: center;
-  margin-bottom: 15px;
+  gap: 16px;
+  flex-shrink: 0;
+}
+
+.filtered-total-summary {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  padding: 6px 12px;
+  background: #fff;
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+  min-width: 140px;
+}
+
+.filtered-total-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #6c757d;
+  font-weight: 600;
+}
+
+.filtered-total-value {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #198754;
+  font-variant-numeric: tabular-nums;
 }
 
 .filter-select {
@@ -366,6 +411,11 @@
   .filters-row {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .filters-toolbar-right {
+    width: 100%;
+    justify-content: space-between;
   }
   
   .filter-select {

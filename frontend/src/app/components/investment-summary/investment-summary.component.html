@@ -20,22 +20,30 @@
 
     <!-- Filters Row -->
     <div class="filters-row">
-      <select [(ngModel)]="selectedType" (change)="onFilterChange()" class="filter-select">
-        <option value="">All Types</option>
-        <option *ngFor="let type of investmentTypes" [value]="type">{{ type }}</option>
-      </select>
+      <div class="filters-selects-wrap">
+        <select [(ngModel)]="selectedType" (change)="onFilterChange()" class="filter-select">
+          <option value="">All Types</option>
+          <option *ngFor="let type of investmentTypes" [value]="type">{{ type }}</option>
+        </select>
 
-      <select [(ngModel)]="selectedPlatform" (change)="onFilterChange()" class="filter-select">
-        <option value="">All Platforms</option>
-        <option *ngFor="let platform of platforms" [value]="platform">{{ platform }}</option>
-      </select>
+        <select [(ngModel)]="selectedPlatform" (change)="onFilterChange()" class="filter-select">
+          <option value="">All Platforms</option>
+          <option *ngFor="let platform of platforms" [value]="platform">{{ platform }}</option>
+        </select>
 
-      <select [(ngModel)]="selectedCategory" (change)="onFilterChange()" class="filter-select">
-        <option value="">All Categories</option>
-        <option *ngFor="let category of categories" [value]="category">{{ category }}</option>
-      </select>
+        <select [(ngModel)]="selectedCategory" (change)="onFilterChange()" class="filter-select">
+          <option value="">All Categories</option>
+          <option *ngFor="let category of categories" [value]="category">{{ category }}</option>
+        </select>
+      </div>
 
-      <button (click)="clearFilters()" class="clear-btn">Clear Filters</button>
+      <div class="filters-toolbar-right">
+        <button (click)="clearFilters()" class="clear-btn">Clear Filters</button>
+        <div class="filtered-total-summary" *ngIf="!loading">
+          <span class="filtered-total-label">Total (₹)</span>
+          <span class="filtered-total-value">{{ filteredTotalAmount | number:'1.2-2' }}</span>
+        </div>
+      </div>
     </div>
 
     <!-- Items Per Page Selector -->
