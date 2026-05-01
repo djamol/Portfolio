@@ -90,6 +90,101 @@
     </div>
   </div>
 
+  <div class="card" style="margin-top: 20px;">
+    <h3>Advance Analytics</h3>
+
+    <div *ngIf="advanceErrorMessage" style="background: #fff7ed; color: #9a3412; padding: 12px; border-radius: 6px; margin-bottom: 16px;">
+      <strong>Note:</strong> {{ advanceErrorMessage }}
+    </div>
+
+    <div class="advance-grid">
+      <div class="advance-card">
+        <h4>Portfolio Value (Snapshots)</h4>
+        <div *ngIf="valueSeriesChartData.labels && valueSeriesChartData.labels.length > 0" class="chart-container">
+          <canvas baseChart
+            [data]="valueSeriesChartData"
+            [options]="lineChartOptions"
+            [type]="'line'">
+          </canvas>
+        </div>
+        <div *ngIf="!valueSeriesChartData.labels || valueSeriesChartData.labels.length === 0" style="text-align: center; padding: 24px; color: #6b7280;">
+          <p>No snapshot data yet</p>
+        </div>
+      </div>
+
+      <div class="advance-card">
+        <h4>Latest Allocation (by Type)</h4>
+        <div *ngIf="allocationLatestChartData.labels && allocationLatestChartData.labels.length > 0" class="chart-container">
+          <canvas baseChart
+            [data]="allocationLatestChartData"
+            [options]="doughnutChartOptions"
+            [type]="'doughnut'">
+          </canvas>
+        </div>
+        <div *ngIf="!allocationLatestChartData.labels || allocationLatestChartData.labels.length === 0" style="text-align: center; padding: 24px; color: #6b7280;">
+          <p>No allocation data yet</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="advance-card" style="margin-top: 16px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
+        <h4 style="margin: 0;">Change Between Two Dates (Top Movers)</h4>
+        <div class="delta-controls">
+          <label>
+            From
+            <input type="date" [(ngModel)]="deltaFrom" class="date-input">
+          </label>
+          <label>
+            To
+            <input type="date" [(ngModel)]="deltaTo" class="date-input">
+          </label>
+          <button class="btn btn-primary" (click)="loadDelta()" [disabled]="deltaLoading || !deltaFrom || !deltaTo">
+            {{ deltaLoading ? 'Loading...' : 'Load' }}
+          </button>
+        </div>
+      </div>
+
+      <div class="delta-grid" *ngIf="(topGainers && topGainers.length) || (topLosers && topLosers.length)" style="margin-top: 12px;">
+        <div>
+          <h5 style="margin: 8px 0;">Top Gainers</h5>
+          <div class="delta-table">
+            <div class="delta-row delta-head">
+              <div>Holding</div><div class="right">Δ</div>
+            </div>
+            <div class="delta-row" *ngFor="let r of topGainers">
+              <div class="name">
+                <div class="title">{{ r.sub_type_name || r.website_app_name }}</div>
+                <div class="meta">{{ r.investment_type }} • {{ r.sub_type_category || '—' }}</div>
+              </div>
+              <div class="right pos">₹{{ toNumber(r.delta) | number:'1.2-2' }}</div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <h5 style="margin: 8px 0;">Top Losers</h5>
+          <div class="delta-table">
+            <div class="delta-row delta-head">
+              <div>Holding</div><div class="right">Δ</div>
+            </div>
+            <div class="delta-row" *ngFor="let r of topLosers">
+              <div class="name">
+                <div class="title">{{ r.sub_type_name || r.website_app_name }}</div>
+                <div class="meta">{{ r.investment_type }} • {{ r.sub_type_category || '—' }}</div>
+              </div>
+              <div class="right neg">₹{{ toNumber(r.delta) | number:'1.2-2' }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div *ngIf="!deltaLoading && deltaFrom && deltaTo && deltaRows && deltaRows.length === 0" style="text-align: center; padding: 20px; color: #6b7280;">
+        <p>No delta data for those dates (or no holdings existed on either date).</p>
+      </div>
+    </div>
+  </div>
+
   <!-- Link to Investment Summary Page -->
   <div class="card" style="margin-top: 20px; text-align: center;">
     <h3>Detailed Investment Summary</h3>

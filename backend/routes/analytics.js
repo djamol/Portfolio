@@ -160,6 +160,131 @@ router.get('/growth', async (req, res) => {
   }
 });
 
+// Portfolio value over time from history snapshots (best for line chart)
+router.get('/value-series', async (req, res) => {
+  try {
+    const pool = db.getPool();
+    const [rows] = await pool.query(`
+      SELECT
+        change_date,
+        SUM(amount) AS total_value
+      FROM investment_history
+      GROUP BY change_date
+      ORDER BY change_date ASC
+    `);
+    res.json({ success: true, data: rows });
+  } catch (error) {
+    console.error('Error fetching value series:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Latest allocation by investment_type (donut/treemap)
+router.get('/allocation-latest', async (req, res) => {
+  try {
+    const pool = db.getPool();
+    const [rows] = await pool.query(`
+      WITH latest AS (
+        SELECT investment_id, MAX(change_date) AS max_dt
+        FROM investment_history
+        GROUP BY investment_id
+      )
+      SELECT
+        i.investment_type,
+        SUM(ih.amount) AS value
+      FROM latest l
+      JOIN investment_history ih
+        ON ih.investment_id = l.investment_id AND ih.change_date = l.max_dt
+      JOIN investments i
+        ON i.id = ih.investment_id
+      GROUP BY i.investment_type
+      ORDER BY value DESC
+    `);
+    res.json({ success: true, data: rows });
+  } catch (error) {
+    console.error('Error fetching latest allocation:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Delta between two snapshot dates (waterfall / top movers)
+// Query params: from=YYYY-MM-DD&to=YYYY-MM-DD
+router.get('/delta', async (req, res) => {
+  try {
+    const fromDate = req.query.from;
+    const toDate = req.query.to;
+
+    if (!fromDate || !toDate) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing query params. Expected from=YYYY-MM-DD&to=YYYY-MM-DD'
+      });
+    }
+
+    const pool = db.getPool();
+    const [rows] = await pool.query(
+      `
+      WITH a AS (
+        SELECT investment_id, amount
+        FROM investment_history
+        WHERE change_date = ?
+      ),
+      b AS (
+        SELECT investment_id, amount
+        FROM investment_history
+        WHERE change_date = ?
+      )
+      SELECT
+        i.id AS investment_id,
+        i.website_app_name,
+        i.investment_type,
+        i.sub_type_name,
+        i.sub_type_category,
+        COALESCE(b.amount, 0) AS amount_to,
+        COALESCE(a.amount, 0) AS amount_from,
+        COALESCE(b.amount, 0) - COALESCE(a.amount, 0) AS delta
+      FROM investments i
+      LEFT JOIN a ON a.investment_id = i.id
+      LEFT JOIN b ON b.investment_id = i.id
+      WHERE COALESCE(b.amount, 0) <> 0 OR COALESCE(a.amount, 0) <> 0
+      ORDER BY delta DESC
+      `,
+      [fromDate, toDate]
+    );
+
+    res.json({
+      success: true,
+      meta: { from: fromDate, to: toDate },
+      data: rows
+    });
+  } catch (error) {
+    console.error('Error fetching delta:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Cashflows over time from investment_transactions (bar chart)
+// Helpful for XIRR and income analytics later.
+router.get('/cashflows-by-month', async (req, res) => {
+  try {
+    const pool = db.getPool();
+    const [rows] = await pool.query(`
+      SELECT
+        DATE_FORMAT(txn_date, '%Y-%m') AS month,
+        SUM(cashflow_amount) AS net_cashflow,
+        SUM(CASE WHEN cashflow_amount < 0 THEN -cashflow_amount ELSE 0 END) AS outflow,
+        SUM(CASE WHEN cashflow_amount > 0 THEN cashflow_amount ELSE 0 END) AS inflow
+      FROM investment_transactions
+      GROUP BY DATE_FORMAT(txn_date, '%Y-%m')
+      ORDER BY month ASC
+    `);
+    res.json({ success: true, data: rows });
+  } catch (error) {
+    console.error('Error fetching cashflows:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Get investments by sub type name
 router.get('/by-sub-type-name', async (req, res) => {
   try {

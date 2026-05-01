@@ -1,7 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
-import { AnalyticsService } from '../../services/analytics.service';
+import { AnalyticsService, DeltaRow } from '../../services/analytics.service';
 import { ChartConfiguration, ChartOptions, ChartType } from 'chart.js';
 import { BaseChartDirective } from 'ng2-charts';
 
@@ -16,6 +16,7 @@ export class AnalyticsComponent implements OnInit {
   totalInvestments = 0;
   loading = false;
   errorMessage = '';
+  advanceErrorMessage = '';
 
   // Chart options
   barChartOptions: ChartOptions<'bar'> = {
@@ -91,6 +92,28 @@ export class AnalyticsComponent implements OnInit {
             const value = context.parsed || 0;
             const total = context.dataset.data.reduce((a: number, b: number) => a + b, 0);
             const percentage = ((value / total) * 100).toFixed(1);
+            return label + ': ₹' + value.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' (' + percentage + '%)';
+          }
+        }
+      }
+    }
+  };
+
+  doughnutChartOptions: ChartOptions<'doughnut'> = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        display: true,
+        position: 'right'
+      },
+      tooltip: {
+        callbacks: {
+          label: function(context) {
+            const label = context.label || '';
+            const value = context.parsed || 0;
+            const total = context.dataset.data.reduce((a: number, b: number) => a + b, 0);
+            const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : '0.0';
             return label + ': ₹' + value.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' (' + percentage + '%)';
           }
         }
@@ -256,6 +279,45 @@ export class AnalyticsComponent implements OnInit {
     }]
   };
 
+  // Advance analytics charts + state
+  valueSeriesChartData: ChartConfiguration<'line'>['data'] = {
+    labels: [],
+    datasets: [{
+      label: 'Total Value (₹)',
+      data: [],
+      borderColor: 'rgba(34, 197, 94, 1)',
+      backgroundColor: 'rgba(34, 197, 94, 0.12)',
+      tension: 0.35,
+      fill: true,
+      pointRadius: 2,
+      pointHoverRadius: 5
+    }]
+  };
+
+  allocationLatestChartData: ChartConfiguration<'doughnut'>['data'] = {
+    labels: [],
+    datasets: [{
+      data: [],
+      backgroundColor: [
+        'rgba(102, 126, 234, 0.85)',
+        'rgba(16, 185, 129, 0.85)',
+        'rgba(245, 158, 11, 0.85)',
+        'rgba(239, 68, 68, 0.85)',
+        'rgba(118, 75, 162, 0.85)',
+        'rgba(59, 130, 246, 0.85)',
+        'rgba(236, 72, 153, 0.85)',
+        'rgba(14, 165, 233, 0.85)'
+      ]
+    }]
+  };
+
+  deltaFrom = '';
+  deltaTo = '';
+  deltaLoading = false;
+  deltaRows: DeltaRow[] = [];
+  topGainers: DeltaRow[] = [];
+  topLosers: DeltaRow[] = [];
+
   constructor(private analyticsService: AnalyticsService) {}
 
   ngOnInit() {
@@ -265,8 +327,9 @@ export class AnalyticsComponent implements OnInit {
   loadAnalytics() {
     this.loading = true;
     this.errorMessage = '';
+    this.advanceErrorMessage = '';
     let completedRequests = 0;
-    const totalRequests = 8; // Reduced by 1 since we removed summary table API call
+    const totalRequests = 10;
 
     const checkComplete = () => {
       completedRequests++;
@@ -563,6 +626,61 @@ export class AnalyticsComponent implements OnInit {
         checkComplete();
       }
     });
+
+    // Advance: Portfolio value series from snapshots (line chart)
+    this.analyticsService.getValueSeries().subscribe({
+      next: (response) => {
+        if (response.data && response.data.length > 0) {
+          this.valueSeriesChartData = {
+            labels: response.data.map((p) => p.change_date),
+            datasets: [{
+              ...this.valueSeriesChartData.datasets[0],
+              data: response.data.map((p) => typeof p.total_value === 'string' ? parseFloat(p.total_value) : Number(p.total_value) || 0)
+            }]
+          };
+
+          // Auto-fill delta dates (last 2 snapshots)
+          if (!this.deltaFrom || !this.deltaTo) {
+            const dates = response.data.map((p) => p.change_date);
+            if (dates.length >= 2) {
+              this.deltaFrom = dates[dates.length - 2];
+              this.deltaTo = dates[dates.length - 1];
+            } else {
+              this.deltaFrom = dates[0];
+              this.deltaTo = dates[0];
+            }
+          }
+        }
+        checkComplete();
+      },
+      error: (error) => {
+        console.error('Error loading value series:', error);
+        this.advanceErrorMessage = 'Advance analytics: failed to load portfolio value series.';
+        checkComplete();
+      }
+    });
+
+    // Advance: Latest allocation by type (doughnut chart)
+    this.analyticsService.getAllocationLatest().subscribe({
+      next: (response) => {
+        if (response.data && response.data.length > 0) {
+          const sortedData = [...response.data].sort((a, b) => parseFloat(String(b.value)) - parseFloat(String(a.value)));
+          this.allocationLatestChartData = {
+            labels: sortedData.map((r) => r.investment_type),
+            datasets: [{
+              ...this.allocationLatestChartData.datasets[0],
+              data: sortedData.map((r) => typeof r.value === 'string' ? parseFloat(r.value) : Number(r.value) || 0)
+            }]
+          };
+        }
+        checkComplete();
+      },
+      error: (error) => {
+        console.error('Error loading allocation latest:', error);
+        this.advanceErrorMessage = this.advanceErrorMessage || 'Advance analytics: failed to load latest allocation.';
+        checkComplete();
+      }
+    });
   }
 
   // Initialize the dynamic charts with default selections
@@ -820,5 +938,37 @@ export class AnalyticsComponent implements OnInit {
         });
         break;
     }
+  }
+
+  loadDelta() {
+    if (!this.deltaFrom || !this.deltaTo) return;
+
+    this.deltaLoading = true;
+    this.advanceErrorMessage = '';
+
+    this.analyticsService.getDelta(this.deltaFrom, this.deltaTo).subscribe({
+      next: (response) => {
+        this.deltaRows = response.data || [];
+        const gainers = [...this.deltaRows].sort((a, b) => Number(b.delta) - Number(a.delta));
+        const losers = [...this.deltaRows].sort((a, b) => Number(a.delta) - Number(b.delta));
+        this.topGainers = gainers.slice(0, 10);
+        this.topLosers = losers.slice(0, 10);
+        this.deltaLoading = false;
+      },
+      error: (error) => {
+        console.error('Error loading delta:', error);
+        this.advanceErrorMessage = 'Advance analytics: failed to load delta. Make sure both dates exist in investment history.';
+        this.deltaLoading = false;
+      }
+    });
+  }
+
+  toNumber(value: unknown): number {
+    if (typeof value === 'number') return value;
+    if (typeof value === 'string') {
+      const n = parseFloat(value);
+      return Number.isFinite(n) ? n : 0;
+    }
+    return 0;
   }
 }

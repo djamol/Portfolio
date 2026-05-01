@@ -82,6 +82,10 @@ The frontend will be available at `http://localhost:4200`
 - `GET /api/analytics/yearly-changes` - Get yearly changes
 - `GET /api/analytics/by-platform` - Get investments by platform
 - `GET /api/analytics/growth` - Get portfolio growth over time
+- `GET /api/analytics/value-series` - Portfolio value time series from history snapshots
+- `GET /api/analytics/allocation-latest` - Latest allocation grouped by investment type
+- `GET /api/analytics/delta?from=YYYY-MM-DD&to=YYYY-MM-DD` - Per-investment value change between two snapshot dates
+- `GET /api/analytics/cashflows-by-month` - Net inflow/outflow per month from transactions
 
 ## Database Schema
 
@@ -102,6 +106,17 @@ The frontend will be available at `http://localhost:4200`
 - `amount` - Amount at time of change
 - `change_date` - Date of change
 - `change_type` - Type of change (added, removed, updated)
+- `notes` - Optional notes
+- `created_at` - Record creation timestamp
+
+### investment_transactions
+- `id` - Primary key
+- `investment_id` - Foreign key to investments
+- `txn_date` - Transaction date
+- `txn_type` - buy/sell/dividend/interest/fee/etc.
+- `units` - Optional units (stocks/ETFs/MFs)
+- `price` - Optional price
+- `cashflow_amount` - Cashflow convention: **negative = outflow** (buy/fee), **positive = inflow** (sell/dividend/interest)
 - `notes` - Optional notes
 - `created_at` - Record creation timestamp
 

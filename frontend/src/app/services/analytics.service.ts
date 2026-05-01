@@ -2,6 +2,20 @@ import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 
+export type PortfolioValueSeriesPoint = { change_date: string; total_value: number | string };
+export type AllocationLatestRow = { investment_type: string; value: number | string };
+export type DeltaRow = {
+  investment_id: number;
+  website_app_name: string;
+  investment_type: string;
+  sub_type_name: string | null;
+  sub_type_category: string | null;
+  amount_to: number | string;
+  amount_from: number | string;
+  delta: number | string;
+};
+export type CashflowByMonthRow = { month: string; net_cashflow: number | string; outflow: number | string; inflow: number | string };
+
 @Injectable({
   providedIn: 'root'
 })
@@ -59,5 +73,22 @@ export class AnalyticsService {
 
   getInvestmentHistory(id: number): Observable<{ success: boolean; data: any[] }> {
     return this.http.get<{ success: boolean; data: any[] }>(`${this.getApiUrl()}/analytics/investment-history/${id}`);
+  }
+
+  getValueSeries(): Observable<{ success: boolean; data: PortfolioValueSeriesPoint[] }> {
+    return this.http.get<{ success: boolean; data: PortfolioValueSeriesPoint[] }>(`${this.getApiUrl()}/analytics/value-series`);
+  }
+
+  getAllocationLatest(): Observable<{ success: boolean; data: AllocationLatestRow[] }> {
+    return this.http.get<{ success: boolean; data: AllocationLatestRow[] }>(`${this.getApiUrl()}/analytics/allocation-latest`);
+  }
+
+  getDelta(from: string, to: string): Observable<{ success: boolean; meta: { from: string; to: string }; data: DeltaRow[] }> {
+    const params = `from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
+    return this.http.get<{ success: boolean; meta: { from: string; to: string }; data: DeltaRow[] }>(`${this.getApiUrl()}/analytics/delta?${params}`);
+  }
+
+  getCashflowsByMonth(): Observable<{ success: boolean; data: CashflowByMonthRow[] }> {
+    return this.http.get<{ success: boolean; data: CashflowByMonthRow[] }>(`${this.getApiUrl()}/analytics/cashflows-by-month`);
   }
 }

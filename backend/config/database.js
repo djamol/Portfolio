@@ -110,6 +110,37 @@ const createTables = async () => {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
 
+    // Investment transactions for true cashflow-based analytics (XIRR, realized P&L, income)
+    // Convention: cashflow_amount is POSITIVE for inflows (sell/dividend/interest),
+    // NEGATIVE for outflows (buy/fee). Units/price are optional for non-market instruments.
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS investment_transactions (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        investment_id INT NOT NULL,
+        txn_date DATE NOT NULL,
+        txn_type ENUM(
+          'buy',
+          'sell',
+          'dividend',
+          'interest',
+          'fee',
+          'deposit',
+          'withdrawal',
+          'transfer_in',
+          'transfer_out'
+        ) NOT NULL,
+        units DECIMAL(20, 8) NULL,
+        price DECIMAL(20, 8) NULL,
+        cashflow_amount DECIMAL(15, 2) NOT NULL,
+        notes TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (investment_id) REFERENCES investments(id) ON DELETE CASCADE,
+        INDEX idx_txn_investment_id (investment_id),
+        INDEX idx_txn_date (txn_date),
+        INDEX idx_txn_type (txn_type)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+
     console.log('Tables created successfully');
   } catch (error) {
     console.error('Error creating tables:', error);
