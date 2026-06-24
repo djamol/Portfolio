@@ -1,9 +1,11 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
-import { AnalyticsService, DeltaRow, InsightsResponse } from '../../services/analytics.service';
+import { AnalyticsService, AnalyticsFilters, DeltaRow, InsightsResponse } from '../../services/analytics.service';
 import { ChartConfiguration, ChartOptions, ChartType } from 'chart.js';
 import { BaseChartDirective } from 'ng2-charts';
+import { INVESTMENT_TYPES } from '../../constants/investment-types.constants';
+import { hasMultiSelectFilter, pruneSelections } from '../../utils/advanced-filter.util';
 
 @Component({
   selector: 'app-analytics',
@@ -318,12 +320,24 @@ export class AnalyticsComponent implements OnInit {
   topGainers: DeltaRow[] = [];
   topLosers: DeltaRow[] = [];
 
-  // Filters (UX)
-  filterPlatform = '';
-  filterType = '';
+  // Filters (Advance Analytics)
+  showAdvancedFilters = false;
+  filterPlatforms: string[] = [];
+  filterTypes: string[] = [];
+  filterSubTypes: string[] = [];
+  filterCategories: string[] = [];
   filterFrom = '';
   filterTo = '';
+  filterMinAmount: number | null = null;
+  filterMaxAmount: number | null = null;
+  filterIgnoreZero = false;
   applyingFilters = false;
+
+  investmentTypes: string[] = INVESTMENT_TYPES;
+  filterPlatformsOptions: string[] = [];
+  filterSubTypesOptions: string[] = [];
+  filterCategoriesOptions: string[] = [];
+  filterSummaryData: any[] = [];
 
   // Insights + Planning
   insightsLoading = false;
@@ -335,7 +349,99 @@ export class AnalyticsComponent implements OnInit {
   constructor(private analyticsService: AnalyticsService) {}
 
   ngOnInit() {
+    this.loadFilterOptions();
     this.loadAnalytics();
+  }
+
+  loadFilterOptions() {
+    this.analyticsService.getSummaryTable().subscribe({
+      next: (response) => {
+        if (response.data) {
+          this.filterSummaryData = response.data;
+          this.filterPlatformsOptions = [...new Set(response.data.map((item: any) => item.website_app_name))].filter(Boolean).sort();
+          this.filterSubTypesOptions = [...new Set(response.data.map((item: any) => item.sub_type_name))].filter(Boolean).sort();
+          this.filterCategoriesOptions = [...new Set(response.data.map((item: any) => item.sub_type_category))].filter(Boolean).sort();
+        }
+      },
+      error: (error) => console.error('Error loading filter options:', error)
+    });
+  }
+
+  get availableFilterSubTypes(): string[] {
+    let source = this.filterSummaryData;
+    if (this.filterTypes.length) {
+      source = source.filter((item) => this.filterTypes.includes(item.investment_type));
+    }
+    return [...new Set(source.map((item) => item.sub_type_name))].filter(Boolean).sort();
+  }
+
+  get availableFilterCategories(): string[] {
+    let source = this.filterSummaryData;
+    if (this.filterTypes.length) {
+      source = source.filter((item) => this.filterTypes.includes(item.investment_type));
+    }
+    if (this.filterSubTypes.length) {
+      source = source.filter((item) => this.filterSubTypes.includes(item.sub_type_name));
+    }
+    return [...new Set(source.map((item) => item.sub_type_category))].filter(Boolean).sort();
+  }
+
+  toggleAdvancedFilters() {
+    this.showAdvancedFilters = !this.showAdvancedFilters;
+  }
+
+  hasActiveAdvancedFilters(): boolean {
+    return !!(
+      hasMultiSelectFilter(this.filterTypes) ||
+      hasMultiSelectFilter(this.filterSubTypes) ||
+      hasMultiSelectFilter(this.filterCategories) ||
+      hasMultiSelectFilter(this.filterPlatforms) ||
+      this.filterFrom ||
+      this.filterTo ||
+      this.isPriceFilterActive() ||
+      this.filterIgnoreZero
+    );
+  }
+
+  isPriceFilterActive(): boolean {
+    return (this.filterMinAmount !== null && this.filterMinAmount !== undefined && !Number.isNaN(this.filterMinAmount)) ||
+      (this.filterMaxAmount !== null && this.filterMaxAmount !== undefined && !Number.isNaN(this.filterMaxAmount));
+  }
+
+  onAdvancedTypeChange() {
+    this.filterSubTypes = pruneSelections(this.filterSubTypes, this.availableFilterSubTypes);
+    this.filterCategories = pruneSelections(this.filterCategories, this.availableFilterCategories);
+  }
+
+  onAdvancedSubTypeChange() {
+    this.filterCategories = pruneSelections(this.filterCategories, this.availableFilterCategories);
+  }
+
+  getAnalyticsFilters(): AnalyticsFilters {
+    return {
+      from: this.filterFrom || undefined,
+      to: this.filterTo || undefined,
+      platform: this.filterPlatforms,
+      type: this.filterTypes,
+      subType: this.filterSubTypes,
+      category: this.filterCategories,
+      minAmount: this.filterMinAmount,
+      maxAmount: this.filterMaxAmount,
+      ignoreZero: this.filterIgnoreZero
+    };
+  }
+
+  clearAdvanceFilters() {
+    this.filterPlatforms = [];
+    this.filterTypes = [];
+    this.filterSubTypes = [];
+    this.filterCategories = [];
+    this.filterFrom = '';
+    this.filterTo = '';
+    this.filterMinAmount = null;
+    this.filterMaxAmount = null;
+    this.filterIgnoreZero = false;
+    this.applyFilters();
   }
 
   loadAnalytics() {
@@ -642,11 +748,11 @@ export class AnalyticsComponent implements OnInit {
     });
 
     // Advance: Portfolio value series from snapshots (line chart)
-    this.analyticsService.getValueSeriesFiltered({ from: this.filterFrom || undefined, to: this.filterTo || undefined, platform: this.filterPlatform || undefined, type: this.filterType || undefined }).subscribe({
+    this.analyticsService.getValueSeriesFiltered(this.getAnalyticsFilters()).subscribe({
       next: (response) => {
         if (response.data && response.data.length > 0) {
           this.valueSeriesChartData = {
-            labels: response.data.map((p) => p.change_date),
+            labels: response.data.map((p) => this.formatSnapshotLabel(p.change_date)),
             datasets: [{
               ...this.valueSeriesChartData.datasets[0],
               data: response.data.map((p) => typeof p.total_value === 'string' ? parseFloat(p.total_value) : Number(p.total_value) || 0)
@@ -675,7 +781,7 @@ export class AnalyticsComponent implements OnInit {
     });
 
     // Advance: Latest allocation by type (doughnut chart)
-    this.analyticsService.getAllocationLatestFiltered({ platform: this.filterPlatform || undefined }).subscribe({
+    this.analyticsService.getAllocationLatestFiltered(this.getAnalyticsFilters()).subscribe({
       next: (response) => {
         if (response.data && response.data.length > 0) {
           const sortedData = [...response.data].sort((a, b) => parseFloat(String(b.value)) - parseFloat(String(a.value)));
@@ -702,7 +808,7 @@ export class AnalyticsComponent implements OnInit {
 
     // Insights panel (hygiene + risk)
     this.insightsLoading = true;
-    this.analyticsService.getInsights().subscribe({
+    this.analyticsService.getInsights(this.getAnalyticsFilters()).subscribe({
       next: (response) => {
         this.insights = response.data;
         this.insightsLoading = false;
@@ -1005,6 +1111,14 @@ export class AnalyticsComponent implements OnInit {
       return Number.isFinite(n) ? n : 0;
     }
     return 0;
+  }
+
+  formatSnapshotLabel(dateStr: string): string {
+    const d = new Date(dateStr);
+    if (Number.isNaN(d.getTime())) {
+      return dateStr;
+    }
+    return d.toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' });
   }
 
   applyFilters() {

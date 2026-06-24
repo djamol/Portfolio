@@ -98,26 +98,85 @@
     </div>
 
     <div class="filters-bar">
-      <div class="filters-title">Filters</div>
-      <label>
-        Platform
-        <input [(ngModel)]="filterPlatform" placeholder="e.g. ICICI Direct" class="filter-input">
-      </label>
-      <label>
-        Type
-        <input [(ngModel)]="filterType" placeholder="e.g. Mutual Fund" class="filter-input">
-      </label>
-      <label>
-        From
-        <input type="date" [(ngModel)]="filterFrom" class="date-input">
-      </label>
-      <label>
-        To
-        <input type="date" [(ngModel)]="filterTo" class="date-input">
-      </label>
-      <button class="btn btn-primary" (click)="applyFilters()" [disabled]="applyingFilters">
-        {{ applyingFilters ? 'Applying...' : 'Apply' }}
-      </button>
+      <div class="filters-toolbar">
+        <div class="filters-title">Filters</div>
+        <button
+          type="button"
+          (click)="toggleAdvancedFilters()"
+          class="advanced-toggle-btn"
+          [class.active]="showAdvancedFilters || hasActiveAdvancedFilters()">
+          Advanced Filters
+          <span *ngIf="hasActiveAdvancedFilters()" class="filter-active-dot"></span>
+        </button>
+        <label>
+          From
+          <input type="date" [(ngModel)]="filterFrom" class="date-input">
+        </label>
+        <label>
+          To
+          <input type="date" [(ngModel)]="filterTo" class="date-input">
+        </label>
+        <button class="btn btn-primary" (click)="applyFilters()" [disabled]="applyingFilters">
+          {{ applyingFilters ? 'Applying...' : 'Apply' }}
+        </button>
+        <button type="button" class="clear-btn" (click)="clearAdvanceFilters()" [disabled]="applyingFilters">
+          Clear
+        </button>
+      </div>
+
+      <div class="advanced-filters-section" *ngIf="showAdvancedFilters">
+        <div class="advanced-filters-grid">
+          <app-multi-select-filter
+            label="Type"
+            [options]="investmentTypes"
+            placeholder="All Types"
+            allLabel="All Types"
+            [(selected)]="filterTypes"
+            (selectedChange)="onAdvancedTypeChange()">
+          </app-multi-select-filter>
+
+          <app-multi-select-filter
+            label="Sub Type"
+            [options]="availableFilterSubTypes"
+            placeholder="All Sub Types"
+            allLabel="All Sub Types"
+            [(selected)]="filterSubTypes"
+            (selectedChange)="onAdvancedSubTypeChange()">
+          </app-multi-select-filter>
+
+          <app-multi-select-filter
+            label="Category"
+            [options]="availableFilterCategories"
+            placeholder="All Categories"
+            allLabel="All Categories"
+            [(selected)]="filterCategories">
+          </app-multi-select-filter>
+
+          <app-multi-select-filter
+            label="Platform"
+            [options]="filterPlatformsOptions"
+            placeholder="All Platforms"
+            allLabel="All Platforms"
+            [(selected)]="filterPlatforms">
+          </app-multi-select-filter>
+
+          <div class="advanced-filter-group">
+            <label>Price Range (₹)</label>
+            <div class="price-range-inputs">
+              <input type="number" [(ngModel)]="filterMinAmount" class="price-input" placeholder="Min" min="0" step="0.01">
+              <span class="price-range-separator">to</span>
+              <input type="number" [(ngModel)]="filterMaxAmount" class="price-input" placeholder="Max" min="0" step="0.01">
+            </div>
+          </div>
+
+          <div class="advanced-filter-group checkbox-group">
+            <label class="checkbox-label">
+              <input type="checkbox" [(ngModel)]="filterIgnoreZero">
+              Ignore 0 value entries
+            </label>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div class="advance-grid">

@@ -3,6 +3,34 @@ import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { getApiBaseUrl } from '../utils/api-url.util';
 
+export type AnalyticsFilters = {
+  from?: string;
+  to?: string;
+  platform?: string[];
+  type?: string[];
+  subType?: string[];
+  category?: string[];
+  minAmount?: number | null;
+  maxAmount?: number | null;
+  ignoreZero?: boolean;
+};
+
+function appendAnalyticsFilters(qs: URLSearchParams, filters: AnalyticsFilters = {}) {
+  if (filters.from) qs.set('from', filters.from);
+  if (filters.to) qs.set('to', filters.to);
+  if (filters.platform?.length) qs.set('platform', filters.platform.join(','));
+  if (filters.type?.length) qs.set('type', filters.type.join(','));
+  if (filters.subType?.length) qs.set('subType', filters.subType.join(','));
+  if (filters.category?.length) qs.set('category', filters.category.join(','));
+  if (filters.minAmount !== null && filters.minAmount !== undefined && !Number.isNaN(filters.minAmount)) {
+    qs.set('minAmount', String(filters.minAmount));
+  }
+  if (filters.maxAmount !== null && filters.maxAmount !== undefined && !Number.isNaN(filters.maxAmount)) {
+    qs.set('maxAmount', String(filters.maxAmount));
+  }
+  if (filters.ignoreZero) qs.set('ignoreZero', 'true');
+}
+
 export type PortfolioValueSeriesPoint = { change_date: string; total_value: number | string };
 export type AllocationLatestRow = { investment_type: string; value: number | string };
 export type DeltaRow = {
@@ -99,12 +127,9 @@ export class AnalyticsService {
     return this.http.get<{ success: boolean; data: PortfolioValueSeriesPoint[] }>(`${this.getApiUrl()}/analytics/value-series`);
   }
 
-  getValueSeriesFiltered(filters: { from?: string; to?: string; platform?: string; type?: string }): Observable<{ success: boolean; data: PortfolioValueSeriesPoint[] }> {
+  getValueSeriesFiltered(filters: AnalyticsFilters = {}): Observable<{ success: boolean; data: PortfolioValueSeriesPoint[] }> {
     const qs = new URLSearchParams();
-    if (filters.from) qs.set('from', filters.from);
-    if (filters.to) qs.set('to', filters.to);
-    if (filters.platform) qs.set('platform', filters.platform);
-    if (filters.type) qs.set('type', filters.type);
+    appendAnalyticsFilters(qs, filters);
     const suffix = qs.toString() ? `?${qs.toString()}` : '';
     return this.http.get<{ success: boolean; data: PortfolioValueSeriesPoint[] }>(`${this.getApiUrl()}/analytics/value-series${suffix}`);
   }
@@ -113,9 +138,9 @@ export class AnalyticsService {
     return this.http.get<{ success: boolean; data: AllocationLatestRow[] }>(`${this.getApiUrl()}/analytics/allocation-latest`);
   }
 
-  getAllocationLatestFiltered(filters: { platform?: string }): Observable<{ success: boolean; data: AllocationLatestRow[] }> {
+  getAllocationLatestFiltered(filters: AnalyticsFilters = {}): Observable<{ success: boolean; data: AllocationLatestRow[] }> {
     const qs = new URLSearchParams();
-    if (filters.platform) qs.set('platform', filters.platform);
+    appendAnalyticsFilters(qs, filters);
     const suffix = qs.toString() ? `?${qs.toString()}` : '';
     return this.http.get<{ success: boolean; data: AllocationLatestRow[] }>(`${this.getApiUrl()}/analytics/allocation-latest${suffix}`);
   }
@@ -129,7 +154,10 @@ export class AnalyticsService {
     return this.http.get<{ success: boolean; data: CashflowByMonthRow[] }>(`${this.getApiUrl()}/analytics/cashflows-by-month`);
   }
 
-  getInsights(): Observable<{ success: boolean; data: InsightsResponse }> {
-    return this.http.get<{ success: boolean; data: InsightsResponse }>(`${this.getApiUrl()}/analytics/insights`);
+  getInsights(filters: AnalyticsFilters = {}): Observable<{ success: boolean; data: InsightsResponse }> {
+    const qs = new URLSearchParams();
+    appendAnalyticsFilters(qs, filters);
+    const suffix = qs.toString() ? `?${qs.toString()}` : '';
+    return this.http.get<{ success: boolean; data: InsightsResponse }>(`${this.getApiUrl()}/analytics/insights${suffix}`);
   }
 }

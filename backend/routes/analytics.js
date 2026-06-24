@@ -1,6 +1,11 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../config/database');
+const {
+  amountAsOfSubquery,
+  buildInvestmentFilterClauses,
+  buildAmountFilterClauses
+} = require('../utils/snapshot-queries');
 
 // Get total portfolio value
 router.get('/total', async (req, res) => {
@@ -165,45 +170,64 @@ router.get('/value-series', async (req, res) => {
   try {
     const from = req.query.from;
     const to = req.query.to;
-    const platform = req.query.platform;
-    const investmentType = req.query.type;
 
     const pool = db.getPool();
-    const where = [];
-    const params = [];
+    const snapshotWhere = [];
+    const snapshotParams = [];
 
     if (from) {
-      where.push('ih.change_date >= ?');
-      params.push(from);
+      snapshotWhere.push('sd.change_date >= ?');
+      snapshotParams.push(from);
     }
     if (to) {
-      where.push('ih.change_date <= ?');
-      params.push(to);
-    }
-    if (platform) {
-      where.push('i.website_app_name = ?');
-      params.push(platform);
-    }
-    if (investmentType) {
-      where.push('i.investment_type = ?');
-      params.push(investmentType);
+      snapshotWhere.push('sd.change_date <= ?');
+      snapshotParams.push(to);
     }
 
-    const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+    const investmentParams = [];
+    const investmentWhere = buildInvestmentFilterClauses(req.query, investmentParams);
+    const investmentSql = investmentWhere.length
+      ? `WHERE ${investmentWhere.join(' AND ')}`
+      : '';
+
+    const amountExpr = amountAsOfSubquery('i', 'sd.change_date');
+    const amountParams = [];
+    const amountWhere = buildAmountFilterClauses(req.query, amountParams, 'vals.amount_at_date');
+
+    const outerWhere = [
+      ...snapshotWhere,
+      ...amountWhere
+    ];
+    const outerSql = outerWhere.length ? `WHERE ${outerWhere.join(' AND ')}` : '';
 
     const [rows] = await pool.query(
       `
       SELECT
-        ih.change_date,
-        SUM(ih.amount) AS total_value
-      FROM investment_history ih
-      JOIN investments i ON i.id = ih.investment_id
-      ${whereSql}
-      GROUP BY ih.change_date
-      ORDER BY ih.change_date ASC
+        sd.change_date,
+        SUM(vals.amount_at_date) AS total_value
+      FROM (
+        SELECT DISTINCT change_date
+        FROM investment_history
+      ) sd
+      JOIN (
+        SELECT
+          i.id,
+          sd2.change_date,
+          ${amountAsOfSubquery('i', 'sd2.change_date')} AS amount_at_date
+        FROM (
+          SELECT DISTINCT change_date
+          FROM investment_history
+        ) sd2
+        CROSS JOIN investments i
+        ${investmentSql}
+      ) vals ON vals.change_date = sd.change_date
+      ${outerSql}
+      GROUP BY sd.change_date
+      ORDER BY sd.change_date ASC
       `,
-      params
+      [...investmentParams, ...snapshotParams, ...amountParams]
     );
+
     res.json({ success: true, data: rows });
   } catch (error) {
     console.error('Error fetching value series:', error);
@@ -214,30 +238,33 @@ router.get('/value-series', async (req, res) => {
 // Latest allocation by investment_type (donut/treemap)
 router.get('/allocation-latest', async (req, res) => {
   try {
-    const platform = req.query.platform;
     const pool = db.getPool();
-    const params = [];
-    const platformSql = platform ? 'WHERE i.website_app_name = ?' : '';
-    if (platform) params.push(platform);
+    const amountExpr = amountAsOfSubquery('i', 'CURDATE()');
+    const investmentParams = [];
+    const investmentWhere = buildInvestmentFilterClauses(req.query, investmentParams);
+    const amountParams = [];
+    const amountWhere = buildAmountFilterClauses(req.query, amountParams, 'vals.amount_at_date');
+    const investmentSql = investmentWhere.length ? `WHERE ${investmentWhere.join(' AND ')}` : '';
+    const amountSql = amountWhere.length ? `WHERE ${amountWhere.join(' AND ')}` : '';
 
-    const [rows] = await pool.query(`
-      WITH latest AS (
-        SELECT investment_id, MAX(change_date) AS max_dt
-        FROM investment_history
-        GROUP BY investment_id
-      )
+    const [rows] = await pool.query(
+      `
       SELECT
-        i.investment_type,
-        SUM(ih.amount) AS value
-      FROM latest l
-      JOIN investment_history ih
-        ON ih.investment_id = l.investment_id AND ih.change_date = l.max_dt
-      JOIN investments i
-        ON i.id = ih.investment_id
-      ${platformSql}
-      GROUP BY i.investment_type
+        vals.investment_type,
+        SUM(vals.amount_at_date) AS value
+      FROM (
+        SELECT
+          i.investment_type,
+          ${amountExpr} AS amount_at_date
+        FROM investments i
+        ${investmentSql}
+      ) vals
+      ${amountSql}
+      GROUP BY vals.investment_type
       ORDER BY value DESC
-    `, params);
+      `,
+      [...investmentParams, ...amountParams]
+    );
     res.json({ success: true, data: rows });
   } catch (error) {
     console.error('Error fetching latest allocation:', error);
@@ -278,24 +305,33 @@ router.get('/insights', async (req, res) => {
     );
     const prevDate = prevRow?.prev_date || null;
 
+    const investmentParams = [];
+    const investmentWhere = buildInvestmentFilterClauses(req.query, investmentParams);
+    const investmentSql = investmentWhere.length ? `WHERE ${investmentWhere.join(' AND ')}` : '';
+    const amountParams = [];
+    const amountWhere = buildAmountFilterClauses(req.query, amountParams, 'vals.amount_at_date');
+    const amountSql = amountWhere.length ? `WHERE ${amountWhere.join(' AND ')}` : '';
+
+    const portfolioValueSql = `
+      SELECT SUM(vals.amount_at_date) AS total_value
+      FROM (
+        SELECT ${amountAsOfSubquery('i', '?')} AS amount_at_date
+        FROM investments i
+        ${investmentSql}
+      ) vals
+      ${amountSql}
+    `;
+
     const [[portfolioLatest]] = await pool.query(
-      `
-      SELECT SUM(amount) AS total_value
-      FROM investment_history
-      WHERE change_date = ?
-      `,
-      [latestDate]
+      portfolioValueSql,
+      [latestDate, ...investmentParams, ...amountParams]
     );
 
     let portfolioPrevValue = null;
     if (prevDate) {
       const [[portfolioPrev]] = await pool.query(
-        `
-        SELECT SUM(amount) AS total_value
-        FROM investment_history
-        WHERE change_date = ?
-        `,
-        [prevDate]
+        portfolioValueSql,
+        [prevDate, ...investmentParams, ...amountParams]
       );
       portfolioPrevValue = portfolioPrev?.total_value ?? null;
     }
@@ -307,8 +343,7 @@ router.get('/insights', async (req, res) => {
       [latestDate]
     );
 
-    // Top holdings concentration at latest snapshot
-    const [topHoldings] = await pool.query(
+    const [topHoldingsRaw] = await pool.query(
       `
       SELECT
         i.id AS investment_id,
@@ -316,21 +351,27 @@ router.get('/insights', async (req, res) => {
         i.investment_type,
         i.sub_type_name,
         i.sub_type_category,
-        ih.amount,
-        (ih.amount / totals.total_value) * 100 AS pct_of_portfolio
-      FROM investment_history ih
-      JOIN investments i ON i.id = ih.investment_id
-      JOIN (
-        SELECT SUM(amount) AS total_value
-        FROM investment_history
-        WHERE change_date = ?
-      ) totals
-      WHERE ih.change_date = ?
-      ORDER BY ih.amount DESC
+        vals.amount_at_date AS amount
+      FROM (
+        SELECT
+          i.id,
+          ${amountAsOfSubquery('i', '?')} AS amount_at_date
+        FROM investments i
+        ${investmentSql}
+      ) vals
+      JOIN investments i ON i.id = vals.id
+      ${amountSql}
+      ORDER BY vals.amount_at_date DESC
       LIMIT 10
       `,
-      [latestDate, latestDate]
+      [latestDate, ...investmentParams, ...amountParams]
     );
+
+    const totalForPct = Number(portfolioLatest?.total_value) || 0;
+    const topHoldings = topHoldingsRaw.map((row) => ({
+      ...row,
+      pct_of_portfolio: totalForPct > 0 ? (Number(row.amount) / totalForPct) * 100 : 0
+    }));
 
     const latestValue = portfolioLatest?.total_value ?? 0;
     const prevValue = portfolioPrevValue;

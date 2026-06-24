@@ -97,14 +97,123 @@
 
 .filters-bar {
   display: flex;
-  align-items: end;
+  flex-direction: column;
   gap: 12px;
-  flex-wrap: wrap;
   background: #ffffff;
   border: 1px solid #e5e7eb;
   border-radius: 10px;
   padding: 12px;
   margin-bottom: 14px;
+}
+
+.filters-toolbar {
+  display: flex;
+  align-items: end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.advanced-toggle-btn {
+  padding: 8px 14px;
+  background-color: #f8fafc;
+  color: #0f172a;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.advanced-toggle-btn:hover,
+.advanced-toggle-btn.active {
+  background-color: #e2e8f0;
+  border-color: #94a3b8;
+}
+
+.filter-active-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #3b82f6;
+}
+
+.advanced-filters-section {
+  border-top: 1px solid #e5e7eb;
+  padding-top: 12px;
+}
+
+.advanced-filters-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 16px;
+  align-items: end;
+}
+
+.advanced-filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.advanced-filter-group > label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.price-range-inputs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.price-input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.price-range-separator {
+  color: #64748b;
+  font-size: 13px;
+}
+
+.checkbox-group {
+  justify-content: flex-end;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+  color: #334155;
+  cursor: pointer;
+  padding: 8px 0;
+}
+
+.clear-btn {
+  padding: 8px 14px;
+  background-color: #64748b;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.clear-btn:hover:not(:disabled) {
+  background-color: #475569;
+}
+
+.clear-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .filters-title {
