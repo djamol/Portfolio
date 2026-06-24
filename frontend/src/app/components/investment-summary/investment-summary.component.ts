@@ -2,6 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AnalyticsService } from '../../services/analytics.service';
+import { INVESTMENT_TYPES } from '../../constants/investment-types.constants';
 
 @Component({
   selector: 'app-investment-summary',
@@ -20,8 +21,13 @@ export class InvestmentSummaryComponent implements OnInit {
   // Search and filter properties
   searchTerm: string = '';
   selectedType: string = '';
-  selectedPlatform: string = '';
+  selectedSubType: string = '';
   selectedCategory: string = '';
+  selectedPlatform: string = '';
+  minAmount: number | null = null;
+  maxAmount: number | null = null;
+  ignoreZeroAmount = false;
+  showAdvancedFilters = false;
   sortBy: string = 'amount';
   sortDirection: 'asc' | 'desc' = 'desc';
 
@@ -38,8 +44,9 @@ export class InvestmentSummaryComponent implements OnInit {
   historyLoading: boolean = false;
 
   // Unique values for filters
-  investmentTypes: string[] = [];
+  investmentTypes: string[] = INVESTMENT_TYPES;
   platforms: string[] = [];
+  subTypes: string[] = [];
   categories: string[] = [];
 
   constructor(private analyticsService: AnalyticsService) {}
@@ -74,14 +81,68 @@ export class InvestmentSummaryComponent implements OnInit {
   }
 
   extractFilterOptions() {
-    // Extract unique investment types
-    this.investmentTypes = [...new Set(this.summaryData.map(item => item.investment_type))].filter(Boolean);
+    this.platforms = [...new Set(this.summaryData.map(item => item.website_app_name))].filter(Boolean).sort();
+    this.subTypes = [...new Set(this.summaryData.map(item => item.sub_type_name))].filter(Boolean).sort();
+    this.categories = [...new Set(this.summaryData.map(item => item.sub_type_category))].filter(Boolean).sort();
+  }
 
-    // Extract unique platforms
-    this.platforms = [...new Set(this.summaryData.map(item => item.website_app_name))].filter(Boolean);
+  get availableSubTypes(): string[] {
+    if (!this.selectedType) {
+      return this.subTypes;
+    }
+    return [...new Set(
+      this.summaryData
+        .filter(item => item.investment_type === this.selectedType)
+        .map(item => item.sub_type_name)
+    )].filter(Boolean).sort();
+  }
 
-    // Extract unique categories
-    this.categories = [...new Set(this.summaryData.map(item => item.sub_type_category))].filter(Boolean);
+  get availableCategories(): string[] {
+    let source = this.summaryData;
+    if (this.selectedType) {
+      source = source.filter(item => item.investment_type === this.selectedType);
+    }
+    if (this.selectedSubType) {
+      source = source.filter(item => item.sub_type_name === this.selectedSubType);
+    }
+    return [...new Set(source.map(item => item.sub_type_category))].filter(Boolean).sort();
+  }
+
+  toggleAdvancedFilters() {
+    this.showAdvancedFilters = !this.showAdvancedFilters;
+  }
+
+  hasActiveAdvancedFilters(): boolean {
+    return !!(
+      this.selectedType ||
+      this.selectedSubType ||
+      this.selectedCategory ||
+      this.selectedPlatform ||
+      this.isPriceFilterActive() ||
+      this.ignoreZeroAmount
+    );
+  }
+
+  isPriceFilterActive(): boolean {
+    return (this.minAmount !== null && this.minAmount !== undefined && !Number.isNaN(this.minAmount)) ||
+      (this.maxAmount !== null && this.maxAmount !== undefined && !Number.isNaN(this.maxAmount));
+  }
+
+  onAdvancedTypeChange() {
+    if (this.selectedSubType && !this.availableSubTypes.includes(this.selectedSubType)) {
+      this.selectedSubType = '';
+    }
+    if (this.selectedCategory && !this.availableCategories.includes(this.selectedCategory)) {
+      this.selectedCategory = '';
+    }
+    this.onFilterChange();
+  }
+
+  onAdvancedSubTypeChange() {
+    if (this.selectedCategory && !this.availableCategories.includes(this.selectedCategory)) {
+      this.selectedCategory = '';
+    }
+    this.onFilterChange();
   }
 
   applyFilters() {
@@ -112,6 +173,22 @@ export class InvestmentSummaryComponent implements OnInit {
     // Apply category filter
     if (this.selectedCategory) {
       result = result.filter(item => item.sub_type_category === this.selectedCategory);
+    }
+
+    if (this.selectedSubType) {
+      result = result.filter(item => item.sub_type_name === this.selectedSubType);
+    }
+
+    if (this.ignoreZeroAmount) {
+      result = result.filter(item => item.amount !== 0);
+    }
+
+    if (this.minAmount !== null && this.minAmount !== undefined && !Number.isNaN(this.minAmount)) {
+      result = result.filter(item => item.amount >= this.minAmount!);
+    }
+
+    if (this.maxAmount !== null && this.maxAmount !== undefined && !Number.isNaN(this.maxAmount)) {
+      result = result.filter(item => item.amount <= this.maxAmount!);
     }
 
     // Apply sorting
@@ -208,8 +285,12 @@ export class InvestmentSummaryComponent implements OnInit {
   clearFilters() {
     this.searchTerm = '';
     this.selectedType = '';
-    this.selectedPlatform = '';
+    this.selectedSubType = '';
     this.selectedCategory = '';
+    this.selectedPlatform = '';
+    this.minAmount = null;
+    this.maxAmount = null;
+    this.ignoreZeroAmount = false;
     this.sortBy = 'amount';
     this.sortDirection = 'desc';
     this.currentPage = 1;
