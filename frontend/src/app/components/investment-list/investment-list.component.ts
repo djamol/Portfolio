@@ -22,7 +22,13 @@ export class InvestmentListComponent implements OnInit {
   // Search and filter properties
   searchTerm: string = '';
   selectedType: string = '';
+  selectedSubType: string = '';
+  selectedCategory: string = '';
   selectedPlatform: string = '';
+  minAmount: number | null = null;
+  maxAmount: number | null = null;
+  ignoreZeroAmount = false;
+  showAdvancedFilters = false;
   sortBy: string = 'investment_date';
   sortDirection: 'asc' | 'desc' = 'desc';
 
@@ -35,6 +41,8 @@ export class InvestmentListComponent implements OnInit {
   // Unique values for filters
   investmentTypes: string[] = INVESTMENT_TYPES;
   platforms: string[] = [];
+  subTypes: string[] = [];
+  categories: string[] = [];
 
   // Modal properties
   showModal = false;
@@ -135,11 +143,68 @@ export class InvestmentListComponent implements OnInit {
   }
 
   extractFilterOptions() {
-    // Use predefined investment types instead of extracting from data
-    // this.investmentTypes is already set to INVESTMENT_TYPES
-      
-    // Extract unique platforms
-    this.platforms = [...new Set(this.investments.map(item => item.website_app_name))].filter(Boolean);
+    this.platforms = [...new Set(this.investments.map(item => item.website_app_name))].filter(Boolean).sort();
+    this.subTypes = [...new Set(this.investments.map(item => item.sub_type_name))].filter(Boolean).sort();
+    this.categories = [...new Set(this.investments.map(item => item.sub_type_category))].filter(Boolean).sort();
+  }
+
+  get availableSubTypes(): string[] {
+    if (!this.selectedType) {
+      return this.subTypes;
+    }
+    return [...new Set(
+      this.investments
+        .filter(item => item.investment_type === this.selectedType)
+        .map(item => item.sub_type_name)
+    )].filter(Boolean).sort();
+  }
+
+  get availableCategories(): string[] {
+    let source = this.investments;
+    if (this.selectedType) {
+      source = source.filter(item => item.investment_type === this.selectedType);
+    }
+    if (this.selectedSubType) {
+      source = source.filter(item => item.sub_type_name === this.selectedSubType);
+    }
+    return [...new Set(source.map(item => item.sub_type_category))].filter(Boolean).sort();
+  }
+
+  toggleAdvancedFilters() {
+    this.showAdvancedFilters = !this.showAdvancedFilters;
+  }
+
+  hasActiveAdvancedFilters(): boolean {
+    return !!(
+      this.selectedType ||
+      this.selectedSubType ||
+      this.selectedCategory ||
+      this.selectedPlatform ||
+      this.isPriceFilterActive() ||
+      this.ignoreZeroAmount
+    );
+  }
+
+  isPriceFilterActive(): boolean {
+    return (this.minAmount !== null && this.minAmount !== undefined && !Number.isNaN(this.minAmount)) ||
+      (this.maxAmount !== null && this.maxAmount !== undefined && !Number.isNaN(this.maxAmount));
+  }
+
+  onAdvancedTypeChange() {
+    if (this.selectedSubType && !this.availableSubTypes.includes(this.selectedSubType)) {
+      this.selectedSubType = '';
+    }
+    if (this.selectedCategory && !this.availableCategories.includes(this.selectedCategory)) {
+      this.selectedCategory = '';
+    }
+    this.onFilterChange();
+  }
+
+  onAdvancedSubTypeChange() {
+    if (this.selectedCategory && !this.availableCategories.includes(this.selectedCategory)) {
+      this.selectedCategory = '';
+    }
+    this.onFilterChange();
   }
 
   applyFilters() {
@@ -165,6 +230,26 @@ export class InvestmentListComponent implements OnInit {
     // Apply platform filter
     if (this.selectedPlatform) {
       result = result.filter(item => item.website_app_name === this.selectedPlatform);
+    }
+
+    if (this.selectedSubType) {
+      result = result.filter(item => item.sub_type_name === this.selectedSubType);
+    }
+
+    if (this.selectedCategory) {
+      result = result.filter(item => item.sub_type_category === this.selectedCategory);
+    }
+
+    if (this.ignoreZeroAmount) {
+      result = result.filter(item => item.amount !== 0);
+    }
+
+    if (this.minAmount !== null && this.minAmount !== undefined && !Number.isNaN(this.minAmount)) {
+      result = result.filter(item => item.amount >= this.minAmount!);
+    }
+
+    if (this.maxAmount !== null && this.maxAmount !== undefined && !Number.isNaN(this.maxAmount)) {
+      result = result.filter(item => item.amount <= this.maxAmount!);
     }
 
     // Apply sorting
@@ -256,7 +341,12 @@ export class InvestmentListComponent implements OnInit {
   clearFilters() {
     this.searchTerm = '';
     this.selectedType = '';
+    this.selectedSubType = '';
+    this.selectedCategory = '';
     this.selectedPlatform = '';
+    this.minAmount = null;
+    this.maxAmount = null;
+    this.ignoreZeroAmount = false;
     this.sortBy = 'investment_date';
     this.sortDirection = 'desc';
     this.currentPage = 1;

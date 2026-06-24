@@ -21,31 +21,99 @@
         class="search-input">
     </div>
 
-    <!-- Filters Row -->
-    <div class="filters-row">
-      <select [(ngModel)]="selectedType" (change)="onFilterChange()" class="filter-select">
-        <option value="">All Types</option>
-        <option *ngFor="let type of investmentTypes" [value]="type">{{ type }}</option>
-      </select>
-
-      <select [(ngModel)]="selectedPlatform" (change)="onFilterChange()" class="filter-select">
-        <option value="">All Platforms</option>
-        <option *ngFor="let platform of platforms" [value]="platform">{{ platform }}</option>
-      </select>
+    <div class="filters-toolbar">
+      <button
+        type="button"
+        (click)="toggleAdvancedFilters()"
+        class="advanced-toggle-btn"
+        [class.active]="showAdvancedFilters || hasActiveAdvancedFilters()">
+        Advanced Filters
+        <span *ngIf="hasActiveAdvancedFilters()" class="filter-active-dot"></span>
+      </button>
 
       <button (click)="clearFilters()" class="clear-btn">Clear Filters</button>
-    </div>
 
-    <!-- Items Per Page Selector -->
-    <div class="items-per-page">
-      <label>Show 
-        <select [(ngModel)]="itemsPerPage" (change)="onItemsPerPageChange()" class="items-select">
-          <option [value]="5">5</option>
-          <option [value]="10">10</option>
-          <option [value]="20">20</option>
-          <option [value]="50">50</option>
+      <!-- Items Per Page Selector -->
+      <div class="items-per-page">
+        <label>Show 
+          <select [(ngModel)]="itemsPerPage" (change)="onItemsPerPageChange()" class="items-select">
+            <option [value]="5">5</option>
+            <option [value]="10">10</option>
+            <option [value]="20">20</option>
+            <option [value]="50">50</option>
+          </select>
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <!-- Advanced Filters Section -->
+  <div class="advanced-filters-section" *ngIf="showAdvancedFilters">
+    <div class="advanced-filters-grid">
+      <div class="advanced-filter-group">
+        <label for="filter-type">Type</label>
+        <select id="filter-type" [(ngModel)]="selectedType" (change)="onAdvancedTypeChange()" class="filter-select">
+          <option value="">All Types</option>
+          <option *ngFor="let type of investmentTypes" [value]="type">{{ type }}</option>
         </select>
-      </label>
+      </div>
+
+      <div class="advanced-filter-group">
+        <label for="filter-sub-type">Sub Type</label>
+        <select id="filter-sub-type" [(ngModel)]="selectedSubType" (change)="onAdvancedSubTypeChange()" class="filter-select">
+          <option value="">All Sub Types</option>
+          <option *ngFor="let subType of availableSubTypes" [value]="subType">{{ subType }}</option>
+        </select>
+      </div>
+
+      <div class="advanced-filter-group">
+        <label for="filter-category">Category</label>
+        <select id="filter-category" [(ngModel)]="selectedCategory" (change)="onFilterChange()" class="filter-select">
+          <option value="">All Categories</option>
+          <option *ngFor="let category of availableCategories" [value]="category">{{ category }}</option>
+        </select>
+      </div>
+
+      <div class="advanced-filter-group">
+        <label for="filter-platform">Platform</label>
+        <select id="filter-platform" [(ngModel)]="selectedPlatform" (change)="onFilterChange()" class="filter-select">
+          <option value="">All Platforms</option>
+          <option *ngFor="let platform of platforms" [value]="platform">{{ platform }}</option>
+        </select>
+      </div>
+
+      <div class="advanced-filter-group">
+        <label>Price Range (₹)</label>
+        <div class="price-range-inputs">
+          <input
+            type="number"
+            [(ngModel)]="minAmount"
+            (input)="onFilterChange()"
+            class="price-input"
+            placeholder="Min"
+            min="0"
+            step="0.01">
+          <span class="price-range-separator">to</span>
+          <input
+            type="number"
+            [(ngModel)]="maxAmount"
+            (input)="onFilterChange()"
+            class="price-input"
+            placeholder="Max"
+            min="0"
+            step="0.01">
+        </div>
+      </div>
+
+      <div class="advanced-filter-group checkbox-group">
+        <label class="checkbox-label">
+          <input
+            type="checkbox"
+            [(ngModel)]="ignoreZeroAmount"
+            (change)="onFilterChange()">
+          Ignore 0 value entries
+        </label>
+      </div>
     </div>
   </div>
 

@@ -9,8 +9,110 @@
   display: flex;
   flex-wrap: wrap;
   gap: 15px;
-  margin-bottom: 20px;
+  margin-bottom: 12px;
   align-items: flex-end;
+}
+
+.filters-toolbar {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.advanced-toggle-btn {
+  padding: 8px 15px;
+  background-color: #f8f9fa;
+  color: #333;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.advanced-toggle-btn:hover,
+.advanced-toggle-btn.active {
+  background-color: #e9ecef;
+  border-color: #adb5bd;
+}
+
+.filter-active-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #007bff;
+  display: inline-block;
+}
+
+.advanced-filters-section {
+  background: #f8f9fa;
+  border: 1px solid #e9ecef;
+  border-radius: 6px;
+  padding: 16px;
+  margin-bottom: 20px;
+}
+
+.advanced-filters-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 16px;
+  align-items: end;
+}
+
+.advanced-filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.advanced-filter-group label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #555;
+}
+
+.price-range-inputs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.price-input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.price-range-separator {
+  color: #666;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.checkbox-group {
+  justify-content: flex-end;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+  color: #444;
+  cursor: pointer;
+  padding: 8px 0;
+}
+
+.checkbox-label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
 }
 
 .search-box {
@@ -470,6 +572,24 @@ textarea.form-control {
   .controls-section {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .filters-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .advanced-filters-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .price-range-inputs {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .price-range-separator {
+    text-align: center;
   }
   
   .filters-row {
