@@ -50,37 +50,41 @@
   <!-- Advanced Filters Section -->
   <div class="advanced-filters-section" *ngIf="showAdvancedFilters">
     <div class="advanced-filters-grid">
-      <div class="advanced-filter-group">
-        <label for="filter-type">Type</label>
-        <select id="filter-type" [(ngModel)]="selectedType" (change)="onAdvancedTypeChange()" class="filter-select">
-          <option value="">All Types</option>
-          <option *ngFor="let type of investmentTypes" [value]="type">{{ type }}</option>
-        </select>
-      </div>
+      <app-multi-select-filter
+        label="Type"
+        [options]="investmentTypes"
+        placeholder="All Types"
+        allLabel="All Types"
+        [(selected)]="selectedTypes"
+        (selectedChange)="onAdvancedTypeChange()">
+      </app-multi-select-filter>
 
-      <div class="advanced-filter-group">
-        <label for="filter-sub-type">Sub Type</label>
-        <select id="filter-sub-type" [(ngModel)]="selectedSubType" (change)="onAdvancedSubTypeChange()" class="filter-select">
-          <option value="">All Sub Types</option>
-          <option *ngFor="let subType of availableSubTypes" [value]="subType">{{ subType }}</option>
-        </select>
-      </div>
+      <app-multi-select-filter
+        label="Sub Type"
+        [options]="availableSubTypes"
+        placeholder="All Sub Types"
+        allLabel="All Sub Types"
+        [(selected)]="selectedSubTypes"
+        (selectedChange)="onAdvancedSubTypeChange()">
+      </app-multi-select-filter>
 
-      <div class="advanced-filter-group">
-        <label for="filter-category">Category</label>
-        <select id="filter-category" [(ngModel)]="selectedCategory" (change)="onFilterChange()" class="filter-select">
-          <option value="">All Categories</option>
-          <option *ngFor="let category of availableCategories" [value]="category">{{ category }}</option>
-        </select>
-      </div>
+      <app-multi-select-filter
+        label="Category"
+        [options]="availableCategories"
+        placeholder="All Categories"
+        allLabel="All Categories"
+        [(selected)]="selectedCategories"
+        (selectedChange)="onFilterChange()">
+      </app-multi-select-filter>
 
-      <div class="advanced-filter-group">
-        <label for="filter-platform">Platform</label>
-        <select id="filter-platform" [(ngModel)]="selectedPlatform" (change)="onFilterChange()" class="filter-select">
-          <option value="">All Platforms</option>
-          <option *ngFor="let platform of platforms" [value]="platform">{{ platform }}</option>
-        </select>
-      </div>
+      <app-multi-select-filter
+        label="Platform"
+        [options]="platforms"
+        placeholder="All Platforms"
+        allLabel="All Platforms"
+        [(selected)]="selectedPlatforms"
+        (selectedChange)="onFilterChange()">
+      </app-multi-select-filter>
 
       <div class="advanced-filter-group">
         <label>Price Range (₹)</label>

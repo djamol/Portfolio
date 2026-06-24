@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AnalyticsService } from '../../services/analytics.service';
 import { INVESTMENT_TYPES } from '../../constants/investment-types.constants';
+import { hasMultiSelectFilter, matchesMultiSelect, pruneSelections } from '../../utils/advanced-filter.util';
 
 @Component({
   selector: 'app-investment-summary',
@@ -20,10 +21,10 @@ export class InvestmentSummaryComponent implements OnInit {
 
   // Search and filter properties
   searchTerm: string = '';
-  selectedType: string = '';
-  selectedSubType: string = '';
-  selectedCategory: string = '';
-  selectedPlatform: string = '';
+  selectedTypes: string[] = [];
+  selectedSubTypes: string[] = [];
+  selectedCategories: string[] = [];
+  selectedPlatforms: string[] = [];
   minAmount: number | null = null;
   maxAmount: number | null = null;
   ignoreZeroAmount = false;
@@ -87,23 +88,20 @@ export class InvestmentSummaryComponent implements OnInit {
   }
 
   get availableSubTypes(): string[] {
-    if (!this.selectedType) {
-      return this.subTypes;
+    let source = this.summaryData;
+    if (this.selectedTypes.length) {
+      source = source.filter(item => this.selectedTypes.includes(item.investment_type));
     }
-    return [...new Set(
-      this.summaryData
-        .filter(item => item.investment_type === this.selectedType)
-        .map(item => item.sub_type_name)
-    )].filter(Boolean).sort();
+    return [...new Set(source.map(item => item.sub_type_name))].filter(Boolean).sort();
   }
 
   get availableCategories(): string[] {
     let source = this.summaryData;
-    if (this.selectedType) {
-      source = source.filter(item => item.investment_type === this.selectedType);
+    if (this.selectedTypes.length) {
+      source = source.filter(item => this.selectedTypes.includes(item.investment_type));
     }
-    if (this.selectedSubType) {
-      source = source.filter(item => item.sub_type_name === this.selectedSubType);
+    if (this.selectedSubTypes.length) {
+      source = source.filter(item => this.selectedSubTypes.includes(item.sub_type_name));
     }
     return [...new Set(source.map(item => item.sub_type_category))].filter(Boolean).sort();
   }
@@ -114,10 +112,10 @@ export class InvestmentSummaryComponent implements OnInit {
 
   hasActiveAdvancedFilters(): boolean {
     return !!(
-      this.selectedType ||
-      this.selectedSubType ||
-      this.selectedCategory ||
-      this.selectedPlatform ||
+      hasMultiSelectFilter(this.selectedTypes) ||
+      hasMultiSelectFilter(this.selectedSubTypes) ||
+      hasMultiSelectFilter(this.selectedCategories) ||
+      hasMultiSelectFilter(this.selectedPlatforms) ||
       this.isPriceFilterActive() ||
       this.ignoreZeroAmount
     );
@@ -129,19 +127,13 @@ export class InvestmentSummaryComponent implements OnInit {
   }
 
   onAdvancedTypeChange() {
-    if (this.selectedSubType && !this.availableSubTypes.includes(this.selectedSubType)) {
-      this.selectedSubType = '';
-    }
-    if (this.selectedCategory && !this.availableCategories.includes(this.selectedCategory)) {
-      this.selectedCategory = '';
-    }
+    this.selectedSubTypes = pruneSelections(this.selectedSubTypes, this.availableSubTypes);
+    this.selectedCategories = pruneSelections(this.selectedCategories, this.availableCategories);
     this.onFilterChange();
   }
 
   onAdvancedSubTypeChange() {
-    if (this.selectedCategory && !this.availableCategories.includes(this.selectedCategory)) {
-      this.selectedCategory = '';
-    }
+    this.selectedCategories = pruneSelections(this.selectedCategories, this.availableCategories);
     this.onFilterChange();
   }
 
@@ -160,23 +152,20 @@ export class InvestmentSummaryComponent implements OnInit {
       );
     });
 
-    // Apply type filter
-    if (this.selectedType) {
-      result = result.filter(item => item.investment_type === this.selectedType);
+    if (this.selectedTypes.length) {
+      result = result.filter(item => this.selectedTypes.includes(item.investment_type));
     }
 
-    // Apply platform filter
-    if (this.selectedPlatform) {
-      result = result.filter(item => item.website_app_name === this.selectedPlatform);
+    if (this.selectedPlatforms.length) {
+      result = result.filter(item => this.selectedPlatforms.includes(item.website_app_name));
     }
 
-    // Apply category filter
-    if (this.selectedCategory) {
-      result = result.filter(item => item.sub_type_category === this.selectedCategory);
+    if (this.selectedCategories.length) {
+      result = result.filter(item => matchesMultiSelect(this.selectedCategories, item.sub_type_category));
     }
 
-    if (this.selectedSubType) {
-      result = result.filter(item => item.sub_type_name === this.selectedSubType);
+    if (this.selectedSubTypes.length) {
+      result = result.filter(item => matchesMultiSelect(this.selectedSubTypes, item.sub_type_name));
     }
 
     if (this.ignoreZeroAmount) {
@@ -284,10 +273,10 @@ export class InvestmentSummaryComponent implements OnInit {
 
   clearFilters() {
     this.searchTerm = '';
-    this.selectedType = '';
-    this.selectedSubType = '';
-    this.selectedCategory = '';
-    this.selectedPlatform = '';
+    this.selectedTypes = [];
+    this.selectedSubTypes = [];
+    this.selectedCategories = [];
+    this.selectedPlatforms = [];
     this.minAmount = null;
     this.maxAmount = null;
     this.ignoreZeroAmount = false;

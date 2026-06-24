@@ -12,6 +12,7 @@ import { InvestmentListComponent } from './components/investment-list/investment
 import { InvestmentSummaryComponent } from './components/investment-summary/investment-summary.component';
 import { InvestmentFormComponent } from './components/investment-form/investment-form.component';
 import { ImportDataComponent } from './components/import-data/import-data.component';
+import { MultiSelectFilterComponent } from './components/multi-select-filter/multi-select-filter.component';
 import { routes } from './app.routes';
 
 @NgModule({
@@ -21,7 +22,8 @@ import { routes } from './app.routes';
     InvestmentListComponent,
     InvestmentSummaryComponent,
     InvestmentFormComponent,
-    ImportDataComponent
+    ImportDataComponent,
+    MultiSelectFilterComponent
   ],
   imports: [
     BrowserModule,

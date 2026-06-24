@@ -1,0 +1,32 @@
+<div class="multi-select-filter">
+  <label class="multi-select-label" *ngIf="label">{{ label }}</label>
+  <div class="multi-select-control" [class.open]="isOpen">
+    <button type="button" class="multi-select-trigger" (click)="toggleDropdown($event)">
+      <span class="multi-select-text">{{ displayText }}</span>
+      <span class="multi-select-arrow">▼</span>
+    </button>
+
+    <div class="multi-select-panel" *ngIf="isOpen" (click)="$event.stopPropagation()">
+      <label class="multi-select-option select-all" *ngIf="options.length > 0">
+        <input
+          type="checkbox"
+          [checked]="isAllSelected()"
+          [indeterminate]="isIndeterminate()"
+          (change)="toggleAll($event)">
+        <span>Select All</span>
+      </label>
+
+      <label class="multi-select-option" *ngFor="let option of options">
+        <input
+          type="checkbox"
+          [checked]="isSelected(option)"
+          (change)="toggleOption(option, $event)">
+        <span>{{ option }}</span>
+      </label>
+
+      <div class="multi-select-empty" *ngIf="options.length === 0">
+        No options available
+      </div>
+    </div>
+  </div>
+</div>
