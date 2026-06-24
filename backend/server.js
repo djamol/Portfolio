@@ -7,13 +7,19 @@ const categoriesRoutes = require('./routes/categories');
 const portfolioRoutes = require('./routes/portfolio');
 
 const app = express();
-const PORT = process.env.PORT || 3000; // 
+const PORT = process.env.PORT || 3000;
+const HOST = process.env.HOST || '0.0.0.0';
 
 // CRITICAL FIX: Place trust proxy right after initializing app
 app.enable('trust proxy');
 
 app.use(cors());
 app.use(express.json());
+
+// Health check for login / connectivity tests
+app.get('/api/health', (req, res) => {
+  res.json({ success: true, status: 'ok' });
+});
 
 // Routes
 app.use('/api/investments', investmentRoutes);
@@ -29,10 +35,12 @@ app.get('/', (req, res) => {
 // Initialize database and start server
 db.initializeDatabase()
   .then(() => {
-    app.listen(PORT, () => {
+    app.listen(PORT, HOST, () => {
       console.log(`Tables created successfully`);
       console.log(`Database initialized successfully`);
-      console.log(`[${new Date().toLocaleString()}] Server is running on port ${PORT}`);
+      console.log(`[${new Date().toLocaleString()}] Server is running on http://${HOST}:${PORT}`);
+      console.log(`Local access: http://localhost:${PORT}`);
+      console.log(`Network access: use your machine IP or domain with port ${PORT}, e.g. http://your-domain.com:${PORT}`);
     });
   })
   .catch(err => {

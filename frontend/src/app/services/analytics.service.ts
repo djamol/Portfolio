@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
+import { getApiBaseUrl } from '../utils/api-url.util';
 
 export type PortfolioValueSeriesPoint = { change_date: string; total_value: number | string };
 export type AllocationLatestRow = { investment_type: string; value: number | string };
@@ -41,8 +42,7 @@ export type InsightsResponse = {
 })
 export class AnalyticsService {
   private getApiUrl(): string {
-    const apiDomain = localStorage.getItem('apiDomain') || 'http://localhost:3000';
-    return `${apiDomain}/api`;
+    return getApiBaseUrl();
   }
   
   constructor(private http: HttpClient) {}

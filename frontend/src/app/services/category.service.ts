@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
+import { getApiBaseUrl } from '../utils/api-url.util';
 
 export interface SubTypeName {
   id?: number;
@@ -21,8 +22,7 @@ export interface Category {
 })
 export class CategoryService {
   private getApiUrl(): string {
-    const apiDomain = localStorage.getItem('apiDomain') || 'http://localhost:3000';
-    return `${apiDomain}/api/categories`;
+    return `${getApiBaseUrl()}/categories`;
   }
   
   constructor(private http: HttpClient) {}

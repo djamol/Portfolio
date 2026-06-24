@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable, map } from 'rxjs';
+import { getApiBaseUrl } from '../utils/api-url.util';
 
 interface ApiResponse<T> {
   success: boolean;
@@ -14,8 +15,7 @@ interface ApiResponse<T> {
 })
 export class InvestmentService {
   private getApiUrl(): string {
-    const apiDomain = localStorage.getItem('apiDomain') || 'http://localhost:3000';
-    return `${apiDomain}/api`;
+    return getApiBaseUrl();
   }
   
   constructor(private http: HttpClient) {}

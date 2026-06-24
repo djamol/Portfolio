@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
 import { Router } from '@angular/router';
+import { normalizeApiDomain } from '../utils/api-url.util';
 
 @Injectable({
   providedIn: 'root'
@@ -18,7 +19,7 @@ export class AuthService {
   
   login(apiDomain: string): void {
     localStorage.setItem('isLoggedIn', 'true');
-    localStorage.setItem('apiDomain', apiDomain);
+    localStorage.setItem('apiDomain', normalizeApiDomain(apiDomain));
     localStorage.setItem('loginTime', new Date().toISOString());
   }
   

@@ -4,6 +4,7 @@ import { Router } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AuthService } from '../../services/auth.service';
+import { normalizeApiDomain } from '../../utils/api-url.util';
 
 @Component({
   selector: 'app-login',
@@ -39,6 +40,7 @@ export class LoginComponent implements OnInit {
   login() {
     this.loading = true;
     this.errorMessage = '';
+    this.apiDomain = normalizeApiDomain(this.apiDomain);
     
     // Validate credentials
     if (this.username === 'amol' && this.password === 'admin') {
@@ -51,8 +53,8 @@ export class LoginComponent implements OnInit {
           // Navigate to main application
           this.router.navigate(['/investments']);
         })
-        .catch((error) => {
-          this.errorMessage = 'Cannot connect to API server. Please check the domain and ensure the backend is running.';
+        .catch(() => {
+          this.errorMessage = `Cannot connect to ${this.apiDomain}. Use full URL with protocol and port, e.g. http://your-domain.com:3000`;
           this.loading = false;
         });
     } else {
@@ -69,7 +71,7 @@ export class LoginComponent implements OnInit {
         reject(new Error('API connection timeout'));
       }, 5000);
       
-      const subscription = this.http.get(`${this.apiDomain}/api/investments`)
+      const subscription = this.http.get(`${this.apiDomain}/api/health`)
         .subscribe({
           next: () => {
             clearTimeout(timeout);

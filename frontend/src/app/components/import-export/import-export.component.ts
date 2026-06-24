@@ -1,6 +1,7 @@
 import { Component } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { CommonModule } from '@angular/common';
+import { getApiBaseUrl } from '../../utils/api-url.util';
 
 @Component({
   selector: 'app-import-export',
@@ -10,7 +11,9 @@ import { CommonModule } from '@angular/common';
   styleUrl: './import-export.component.css'
 })
 export class ImportExportComponent {
-  private apiUrl = 'http://localhost:3000/api';
+  private get apiUrl(): string {
+    return getApiBaseUrl();
+  }
   loading = false;
   message = '';
   messageType: 'success' | 'error' | 'info' = 'info';

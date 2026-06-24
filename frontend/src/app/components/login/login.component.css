@@ -34,6 +34,14 @@
   color: #555;
 }
 
+.form-text {
+  display: block;
+  margin-top: 6px;
+  color: #666;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
 .form-control {
   width: 100%;
   padding: 12px;
