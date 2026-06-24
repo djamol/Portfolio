@@ -5,7 +5,6 @@ const investmentRoutes = require('./routes/investments');
 const analyticsRoutes = require('./routes/analytics');
 const categoriesRoutes = require('./routes/categories');
 const portfolioRoutes = require('./routes/portfolio');
-app.enable('trust proxy');
 
 const app = express();
 const PORT = process.env.PORT || 3000; // 
@@ -33,7 +32,7 @@ db.initializeDatabase()
     app.listen(PORT, () => {
       console.log(`Tables created successfully`);
       console.log(`Database initialized successfully`);
-      console.log(`Server is running on port ${PORT}`);
+      console.log(`[${new Date().toLocaleString()}] Server is running on port ${PORT}`);
     });
   })
   .catch(err => {
