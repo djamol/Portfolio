@@ -112,6 +112,56 @@
   color: #94a3b8;
 }
 
+.indian-units {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.82rem;
+  color: #475569;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.indian-units .dot {
+  color: #cbd5e1;
+}
+
+.stat-meta.full-amount {
+  font-size: 0.85rem;
+  color: #64748b;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-value.synced {
+  color: #059669;
+  font-size: 1.15rem;
+}
+
+.insights-strip {
+  margin-bottom: 20px;
+  border-left: 4px solid #667eea;
+}
+
+.insights-strip h3 {
+  margin: 0 0 10px;
+  font-size: 0.95rem;
+  color: #334155;
+}
+
+.insights-strip ul {
+  margin: 0;
+  padding-left: 18px;
+  color: #475569;
+  font-size: 0.88rem;
+  line-height: 1.6;
+}
+
+.insights-strip li + li {
+  margin-top: 4px;
+}
+
 .stat-value.positive,
 .stat-meta.positive {
   color: #059669;
@@ -120,6 +170,11 @@
 .stat-value.negative,
 .stat-meta.negative {
   color: #dc2626;
+}
+
+.stat-card .stat-meta .positive,
+.stat-card .stat-meta .negative {
+  font-weight: 500;
 }
 
 /* Charts */

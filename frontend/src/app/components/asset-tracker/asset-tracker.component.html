@@ -21,42 +21,94 @@
     <div class="stats-grid">
       <div class="stat-card highlight">
         <span class="stat-label">Current Total</span>
-        <span class="stat-value">₹{{ stats.currentAmount | number:'1.2-2' }}</span>
+        <span class="stat-value" *ngIf="currentTotalBreakdown">{{ currentTotalBreakdown.primaryDisplay }}</span>
+        <div class="indian-units" *ngIf="currentTotalBreakdown">
+          <span>{{ currentTotalBreakdown.thousand | number:'1.2-2' }} Thousand</span>
+          <span class="dot">·</span>
+          <span>{{ currentTotalBreakdown.lakh | number:'1.2-2' }} Lakh</span>
+          <span class="dot">·</span>
+          <span>{{ currentTotalBreakdown.crore | number:'1.2-2' }} Cr</span>
+        </div>
+        <span class="stat-meta full-amount" *ngIf="currentTotalBreakdown">{{ currentTotalBreakdown.full }}</span>
         <span class="stat-meta">Latest snapshot: {{ stats.latestSnapshotLabel }}</span>
       </div>
+
       <div class="stat-card">
         <span class="stat-label">Total Growth</span>
-        <span class="stat-value" [class.positive]="isPositive(stats.totalGrowth)" [class.negative]="isNegative(stats.totalGrowth)">
-          {{ isPositive(stats.totalGrowth) ? '+' : '' }}{{ stats.totalGrowth | number:'1.2-2' }}
+        <span class="stat-value" *ngIf="growthBreakdown"
+          [class.positive]="isPositive(stats.totalGrowth)"
+          [class.negative]="isNegative(stats.totalGrowth)">
+          {{ growthBreakdown.primaryDisplay }}
         </span>
+        <span class="stat-meta full-amount" *ngIf="growthBreakdown">{{ growthBreakdown.full }}</span>
         <span class="stat-meta" [class.positive]="isPositive(stats.totalGrowthPercent)" [class.negative]="isNegative(stats.totalGrowthPercent)">
-          {{ stats.totalGrowthPercent | number:'1.2-2' }}% since {{ stats.firstSnapshotLabel }}
+          {{ isPositive(stats.totalGrowthPercent) ? '+' : '' }}{{ stats.totalGrowthPercent | number:'1.2-2' }}% since {{ stats.firstSnapshotLabel }}
         </span>
+        <span class="stat-meta" *ngIf="firstAmountBreakdown">Started at {{ firstAmountBreakdown.primaryDisplay }} ({{ firstAmountBreakdown.full }})</span>
       </div>
+
       <div class="stat-card" *ngIf="stats.cagr !== null">
         <span class="stat-label">CAGR</span>
         <span class="stat-value" [class.positive]="isPositive(stats.cagr)" [class.negative]="isNegative(stats.cagr)">
-          {{ stats.cagr | number:'1.2-2' }}%
+          {{ isPositive(stats.cagr) ? '+' : '' }}{{ stats.cagr | number:'1.2-2' }}%
         </span>
-        <span class="stat-meta">Over {{ stats.trackingMonths }} months</span>
+        <span class="stat-meta">{{ stats.trackingMonths }} months · {{ stats.trackingDays }} days</span>
+        <span class="stat-meta">{{ stats.trackingPeriodLabel }}</span>
       </div>
+
       <div class="stat-card">
         <span class="stat-label">Since Last Snapshot</span>
-        <span class="stat-value" [class.positive]="isPositive(stats.sinceLastSnapshot)" [class.negative]="isNegative(stats.sinceLastSnapshot)">
-          {{ isPositive(stats.sinceLastSnapshot) ? '+' : '' }}{{ stats.sinceLastSnapshot | number:'1.2-2' }}
+        <ng-container *ngIf="stats.sinceLastSnapshot === 0; else changedSinceSnapshot">
+          <span class="stat-value synced">In sync</span>
+          <span class="stat-meta">Live total matches snapshot</span>
+        </ng-container>
+        <ng-template #changedSinceSnapshot>
+          <span class="stat-value" [class.positive]="isPositive(stats.sinceLastSnapshot)" [class.negative]="isNegative(stats.sinceLastSnapshot)">
+            {{ isPositive(stats.sinceLastSnapshot) ? '+' : '' }}{{ stats.sinceLastSnapshot | number:'1.2-2' }}
+          </span>
+          <span class="stat-meta">{{ stats.sinceLastSnapshotPercent | number:'1.2-2' }}% vs snapshot</span>
+        </ng-template>
+        <span class="stat-meta" *ngIf="lastSnapshotBreakdown">
+          Snapshot: {{ lastSnapshotBreakdown.primaryDisplay }} on {{ stats.latestSnapshotLabel }}
         </span>
-        <span class="stat-meta">{{ stats.sinceLastSnapshotPercent | number:'1.2-2' }}%</span>
+        <span class="stat-meta">{{ stats.daysSinceLastSnapshot }} day(s) since last entry</span>
       </div>
+
       <div class="stat-card">
         <span class="stat-label">Peak Value</span>
-        <span class="stat-value">₹{{ stats.highestAmount | number:'1.2-2' }}</span>
-        <span class="stat-meta">{{ stats.highestDateLabel }}</span>
+        <span class="stat-value" *ngIf="peakBreakdown">{{ peakBreakdown.primaryDisplay }}</span>
+        <span class="stat-meta full-amount" *ngIf="peakBreakdown">{{ peakBreakdown.full }}</span>
+        <span class="stat-meta">On {{ stats.highestDateLabel }}</span>
+        <span class="stat-meta" [class.negative]="isNegative(stats.drawdownFromPeak)" *ngIf="stats.drawdownFromPeak !== 0">
+          {{ stats.drawdownFromPeakPercent | number:'1.2-2' }}% below peak now
+        </span>
+        <span class="stat-meta positive" *ngIf="stats.drawdownFromPeak === 0">At peak level</span>
       </div>
+
       <div class="stat-card">
         <span class="stat-label">Snapshots</span>
         <span class="stat-value">{{ stats.snapshotCount }}</span>
-        <span class="stat-meta">Avg period change ₹{{ stats.avgPeriodChange | number:'1.0-0' }}</span>
+        <span class="stat-meta">
+          <span class="positive">{{ stats.positivePeriods }} up</span>
+          ·
+          <span class="negative">{{ stats.negativePeriods }} down</span>
+        </span>
+        <span class="stat-meta">Avg change: {{ getIndianBreakdown(stats.avgPeriodChange).primaryDisplay }}</span>
+        <span class="stat-meta" *ngIf="stats.bestPeriodPercent > 0">
+          Best +{{ stats.bestPeriodPercent | number:'1.2-2' }}% ({{ stats.bestPeriodLabel }})
+        </span>
+        <span class="stat-meta" *ngIf="stats.worstPeriodPercent < 0">
+          Worst {{ stats.worstPeriodPercent | number:'1.2-2' }}% ({{ stats.worstPeriodLabel }})
+        </span>
       </div>
+    </div>
+
+    <!-- Insights strip -->
+    <div class="insights-strip card" *ngIf="stats.insights.length > 0">
+      <h3>Key Insights</h3>
+      <ul>
+        <li *ngFor="let insight of stats.insights">{{ insight }}</li>
+      </ul>
     </div>
 
     <!-- Charts -->
@@ -128,7 +180,7 @@
                 {{ row.dateLabel }}
                 <span *ngIf="row.isLatest" class="badge">Latest</span>
               </td>
-              <td class="num amount-cell">₹{{ row.amount | number:'1.2-2' }}</td>
+              <td class="num amount-cell">{{ getIndianBreakdown(row.amount).primaryDisplay }}</td>
               <td class="num" [class.positive]="isPositive(row.diffPreviousDate)" [class.negative]="isNegative(row.diffPreviousDate)">
                 <ng-container *ngIf="row.diffPreviousDate !== 0">
                   {{ isPositive(row.diffPreviousDate) ? '+' : '' }}{{ row.diffPreviousDate | number:'1.2-2' }}
@@ -143,7 +195,7 @@
               </td>
               <td class="num muted">{{ row.daysSincePrevious ?? '—' }}</td>
               <td class="num" [class.positive]="isPositive(row.diffInL)" [class.negative]="isNegative(row.diffInL)">
-                {{ row.diffInL | number:'1.2-2' }}
+                {{ row.diffInL | number:'1.2-2' }} L
               </td>
               <td class="num muted">{{ row.monthsDiff }}</td>
               <td class="num" [class.positive]="isPositive(row.diffWithCurrent)" [class.negative]="isNegative(row.diffWithCurrent)">

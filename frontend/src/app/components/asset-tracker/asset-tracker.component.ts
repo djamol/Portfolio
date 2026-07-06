@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { AnalyticsService } from '../../services/analytics.service';
 import { ChartConfiguration, ChartOptions } from 'chart.js';
+import { getIndianAmountBreakdown, IndianAmountBreakdown } from '../../utils/indian-number.util';
 
 export interface AssetTrackerRow {
   date: string;
@@ -19,6 +20,7 @@ export interface AssetTrackerRow {
 export interface AssetTrackerStats {
   currentAmount: number;
   latestSnapshotLabel: string;
+  latestSnapshotAmount: number;
   firstSnapshotLabel: string;
   firstAmount: number;
   snapshotCount: number;
@@ -32,7 +34,23 @@ export interface AssetTrackerStats {
   lowestDateLabel: string;
   cagr: number | null;
   trackingMonths: number;
+  trackingDays: number;
+  trackingPeriodLabel: string;
   avgPeriodChange: number;
+  daysSinceLastSnapshot: number;
+  drawdownFromPeak: number;
+  drawdownFromPeakPercent: number;
+  riseFromLow: number;
+  riseFromLowPercent: number;
+  positivePeriods: number;
+  negativePeriods: number;
+  bestPeriodLabel: string;
+  bestPeriodPercent: number;
+  worstPeriodLabel: string;
+  worstPeriodPercent: number;
+  lastPeriodChange: number;
+  lastPeriodChangePercent: number;
+  insights: string[];
 }
 
 type SortDirection = 'asc' | 'desc';
@@ -47,6 +65,11 @@ export class AssetTrackerComponent implements OnInit {
   rows: AssetTrackerRow[] = [];
   displayRows: AssetTrackerRow[] = [];
   stats: AssetTrackerStats | null = null;
+  currentTotalBreakdown: IndianAmountBreakdown | null = null;
+  growthBreakdown: IndianAmountBreakdown | null = null;
+  peakBreakdown: IndianAmountBreakdown | null = null;
+  firstAmountBreakdown: IndianAmountBreakdown | null = null;
+  lastSnapshotBreakdown: IndianAmountBreakdown | null = null;
   loading = false;
   errorMessage = '';
   currentAmount = 0;
@@ -175,6 +198,11 @@ export class AssetTrackerComponent implements OnInit {
           this.rows = [];
           this.displayRows = [];
           this.stats = null;
+          this.currentTotalBreakdown = null;
+          this.growthBreakdown = null;
+          this.peakBreakdown = null;
+          this.firstAmountBreakdown = null;
+          this.lastSnapshotBreakdown = null;
           this.currentAmount = 0;
           this.buildCharts();
           this.loading = false;
@@ -239,6 +267,11 @@ export class AssetTrackerComponent implements OnInit {
     });
 
     this.computeStats(latestDate);
+    this.currentTotalBreakdown = getIndianAmountBreakdown(this.currentAmount);
+    this.growthBreakdown = getIndianAmountBreakdown(this.stats?.totalGrowth ?? 0);
+    this.peakBreakdown = getIndianAmountBreakdown(this.stats?.highestAmount ?? 0);
+    this.firstAmountBreakdown = getIndianAmountBreakdown(this.stats?.firstAmount ?? 0);
+    this.lastSnapshotBreakdown = getIndianAmountBreakdown(this.stats?.latestSnapshotAmount ?? 0);
     this.applySort();
     this.buildCharts();
   }
@@ -257,15 +290,34 @@ export class AssetTrackerComponent implements OnInit {
     const highestRow = this.rows.find((r) => r.amount === highest)!;
     const lowestRow = this.rows.find((r) => r.amount === lowest)!;
 
-    const periodChanges = this.rows.slice(1).map((r) => r.diffPreviousDate);
+    const periodRows = this.rows.slice(1);
+    const periodChanges = periodRows.map((r) => r.diffPreviousDate);
     const avgPeriodChange = periodChanges.length
       ? periodChanges.reduce((a, b) => a + b, 0) / periodChanges.length
       : 0;
+
+    const positivePeriods = periodRows.filter((r) => r.diffPreviousDate > 0).length;
+    const negativePeriods = periodRows.filter((r) => r.diffPreviousDate < 0).length;
+
+    let bestPeriod = periodRows.length > 0 ? periodRows[0] : null;
+    let worstPeriod = periodRows.length > 0 ? periodRows[0] : null;
+    for (const row of periodRows) {
+      if (bestPeriod && row.diffPreviousPercent > bestPeriod.diffPreviousPercent) bestPeriod = row;
+      if (worstPeriod && row.diffPreviousPercent < worstPeriod.diffPreviousPercent) worstPeriod = row;
+    }
 
     const trackingMonths = Math.max(1, this.monthsBetween(
       this.parseDateKey(first.date),
       this.parseDateKey(latestDate)
     ));
+    const trackingDays = this.daysBetween(
+      this.parseDateKey(first.date),
+      this.parseDateKey(latestDate)
+    );
+    const daysSinceLastSnapshot = this.daysBetween(
+      this.parseDateKey(latestDate),
+      new Date()
+    );
 
     let cagr: number | null = null;
     if (first.amount > 0 && trackingMonths > 0) {
@@ -278,16 +330,47 @@ export class AssetTrackerComponent implements OnInit {
       ? (sinceLastSnapshot / latest.amount) * 100
       : 0;
 
+    const totalGrowth = this.currentAmount - first.amount;
+    const totalGrowthPercent = first.amount !== 0
+      ? (totalGrowth / first.amount) * 100
+      : 0;
+
+    const drawdownFromPeak = this.currentAmount - highest;
+    const drawdownFromPeakPercent = highest !== 0 ? (drawdownFromPeak / highest) * 100 : 0;
+    const riseFromLow = this.currentAmount - lowest;
+    const riseFromLowPercent = lowest !== 0 ? (riseFromLow / lowest) * 100 : 0;
+
+    const lastPeriodChange = latest.diffPreviousDate;
+    const lastPeriodChangePercent = latest.diffPreviousPercent;
+
+    const insights = this.buildInsights({
+      totalGrowthPercent,
+      firstSnapshotLabel: first.dateLabel,
+      drawdownFromPeakPercent,
+      highestDateLabel: highestRow.dateLabel,
+      sinceLastSnapshot,
+      latestSnapshotLabel: latest.dateLabel,
+      daysSinceLastSnapshot,
+      positivePeriods,
+      negativePeriods,
+      snapshotCount: this.rows.length,
+      trackingPeriodLabel: `${first.dateLabel} → ${latest.dateLabel}`,
+      bestPeriodLabel: bestPeriod?.dateLabel ?? '',
+      bestPeriodPercent: bestPeriod?.diffPreviousPercent ?? 0,
+      worstPeriodLabel: worstPeriod?.dateLabel ?? '',
+      worstPeriodPercent: worstPeriod?.diffPreviousPercent ?? 0,
+      cagr
+    });
+
     this.stats = {
       currentAmount: this.currentAmount,
       latestSnapshotLabel: latest.dateLabel,
+      latestSnapshotAmount: latest.amount,
       firstSnapshotLabel: first.dateLabel,
       firstAmount: first.amount,
       snapshotCount: this.rows.length,
-      totalGrowth: this.currentAmount - first.amount,
-      totalGrowthPercent: first.amount !== 0
-        ? ((this.currentAmount - first.amount) / first.amount) * 100
-        : 0,
+      totalGrowth,
+      totalGrowthPercent,
       sinceLastSnapshot,
       sinceLastSnapshotPercent,
       highestAmount: highest,
@@ -296,8 +379,85 @@ export class AssetTrackerComponent implements OnInit {
       lowestDateLabel: lowestRow.dateLabel,
       cagr,
       trackingMonths,
-      avgPeriodChange
+      trackingDays,
+      trackingPeriodLabel: `${first.dateLabel} → ${latest.dateLabel}`,
+      avgPeriodChange,
+      daysSinceLastSnapshot,
+      drawdownFromPeak,
+      drawdownFromPeakPercent,
+      riseFromLow,
+      riseFromLowPercent,
+      positivePeriods,
+      negativePeriods,
+      bestPeriodLabel: bestPeriod?.dateLabel ?? '—',
+      bestPeriodPercent: bestPeriod?.diffPreviousPercent ?? 0,
+      worstPeriodLabel: worstPeriod?.dateLabel ?? '—',
+      worstPeriodPercent: worstPeriod?.diffPreviousPercent ?? 0,
+      lastPeriodChange,
+      lastPeriodChangePercent,
+      insights
     };
+  }
+
+  private buildInsights(ctx: {
+    totalGrowthPercent: number;
+    firstSnapshotLabel: string;
+    drawdownFromPeakPercent: number;
+    highestDateLabel: string;
+    sinceLastSnapshot: number;
+    latestSnapshotLabel: string;
+    daysSinceLastSnapshot: number;
+    positivePeriods: number;
+    negativePeriods: number;
+    snapshotCount: number;
+    trackingPeriodLabel: string;
+    bestPeriodLabel: string;
+    bestPeriodPercent: number;
+    worstPeriodLabel: string;
+    worstPeriodPercent: number;
+    cagr: number | null;
+  }): string[] {
+    const insights: string[] = [];
+
+    if (ctx.totalGrowthPercent > 0) {
+      insights.push(`Portfolio grew ${ctx.totalGrowthPercent.toFixed(2)}% since first snapshot (${ctx.firstSnapshotLabel}).`);
+    } else if (ctx.totalGrowthPercent < 0) {
+      insights.push(`Portfolio is down ${Math.abs(ctx.totalGrowthPercent).toFixed(2)}% since first snapshot (${ctx.firstSnapshotLabel}).`);
+    } else {
+      insights.push(`Portfolio is flat since first snapshot (${ctx.firstSnapshotLabel}).`);
+    }
+
+    if (ctx.drawdownFromPeakPercent < -0.01) {
+      insights.push(`Currently ${Math.abs(ctx.drawdownFromPeakPercent).toFixed(2)}% below peak on ${ctx.highestDateLabel}.`);
+    } else if (Math.abs(ctx.drawdownFromPeakPercent) <= 0.01) {
+      insights.push(`At all-time high — peak recorded on ${ctx.highestDateLabel}.`);
+    }
+
+    if (Math.abs(ctx.sinceLastSnapshot) < 0.01) {
+      insights.push(`Live total matches latest snapshot (${ctx.latestSnapshotLabel}) — ${ctx.daysSinceLastSnapshot} day(s) ago.`);
+    } else if (ctx.sinceLastSnapshot > 0) {
+      insights.push(`Live total is ₹${ctx.sinceLastSnapshot.toLocaleString('en-IN')} above last snapshot (${ctx.latestSnapshotLabel}).`);
+    } else {
+      insights.push(`Live total is ₹${Math.abs(ctx.sinceLastSnapshot).toLocaleString('en-IN')} below last snapshot (${ctx.latestSnapshotLabel}).`);
+    }
+
+    const totalPeriods = ctx.snapshotCount - 1;
+    if (totalPeriods > 0) {
+      insights.push(`${ctx.positivePeriods} up / ${ctx.negativePeriods} down periods across ${totalPeriods} intervals.`);
+    }
+
+    if (ctx.bestPeriodPercent > 0 && ctx.bestPeriodLabel) {
+      insights.push(`Best period: +${ctx.bestPeriodPercent.toFixed(2)}% on ${ctx.bestPeriodLabel}.`);
+    }
+    if (ctx.worstPeriodPercent < 0 && ctx.worstPeriodLabel) {
+      insights.push(`Worst period: ${ctx.worstPeriodPercent.toFixed(2)}% on ${ctx.worstPeriodLabel}.`);
+    }
+
+    if (ctx.cagr !== null) {
+      insights.push(`Tracking ${ctx.trackingPeriodLabel} (${ctx.snapshotCount} snapshots).`);
+    }
+
+    return insights;
   }
 
   private applySort() {
@@ -431,5 +591,9 @@ export class AssetTrackerComponent implements OnInit {
 
   isPositive(value: number): boolean {
     return value > 0;
+  }
+
+  getIndianBreakdown(value: number): IndianAmountBreakdown {
+    return getIndianAmountBreakdown(value);
   }
 }
