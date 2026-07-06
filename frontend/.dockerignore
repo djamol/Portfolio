@@ -1,0 +1,12 @@
+node_modules
+dist
+.angular
+npm-debug.log*
+.env
+.env.*
+.git
+.gitignore
+*.md
+.DS_Store
+coverage
+out-tsc
