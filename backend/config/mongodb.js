@@ -43,16 +43,31 @@ const getClient = () => {
 
 async function ensureIndexes(database) {
   logger.info('MongoDB: ensuring indexes');
-  await database.collection('investments').createIndex({ investment_date: -1 });
-  await database.collection('investments').createIndex({ investment_type: 1 });
-  await database.collection('investments').createIndex({ website_app_name: 1 });
-  await database.collection('investment_history').createIndex({ investment_id: 1, change_date: -1 });
-  await database.collection('sub_type_names').createIndex({ name: 1 }, { unique: true });
-  await database.collection('sub_type_categories').createIndex(
-    { category: 1, sub_type_name_id: 1, investment_type: 1 },
-    { unique: true }
-  );
-  await database.collection('counters').createIndex({ _id: 1 }, { unique: true });
+  const indexSpecs = [
+    { collection: 'investments', spec: { investment_date: -1 } },
+    { collection: 'investments', spec: { investment_type: 1 } },
+    { collection: 'investments', spec: { website_app_name: 1 } },
+    { collection: 'investment_history', spec: { investment_id: 1, change_date: -1 } },
+    { collection: 'sub_type_names', spec: { name: 1 }, options: { unique: true } },
+    {
+      collection: 'sub_type_categories',
+      spec: { category: 1, sub_type_name_id: 1, investment_type: 1 },
+      options: { unique: true }
+    }
+  ];
+
+  for (const { collection, spec, options } of indexSpecs) {
+    try {
+      await database.collection(collection).createIndex(spec, options);
+    } catch (error) {
+      // Index already exists with same or compatible definition
+      if (error.code === 85 || error.code === 86) {
+        logger.debug('MongoDB: index already exists', { collection, spec });
+        continue;
+      }
+      throw error;
+    }
+  }
 }
 
 async function initializeDatabaseOnce() {
