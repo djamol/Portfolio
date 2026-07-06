@@ -16,7 +16,7 @@ import { normalizeApiDomain } from '../../utils/api-url.util';
 export class LoginComponent implements OnInit {
   username: string = '';
   password: string = '';
-  apiDomain: string = 'http://localhost:3000';
+  apiDomain: string = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
   errorMessage: string = '';
   loading: boolean = false;
   

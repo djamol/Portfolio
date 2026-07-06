@@ -1,0 +1,36 @@
+# Dependencies
+node_modules
+frontend/node_modules
+backend/node_modules
+npm-debug.log*
+
+# Build outputs
+frontend/dist
+frontend/.angular
+frontend/out-tsc
+
+# Environment & secrets
+.env
+.env.*
+backend/.env
+
+# Git & IDE
+.git
+.gitignore
+.vscode
+.idea
+
+# Docs & data (not needed in image)
+*.md
+data
+*.csv
+*.sql
+*.pdf
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Separate per-service Dockerfiles (root Dockerfile is used)
+# backend/Dockerfile
+# frontend/Dockerfile

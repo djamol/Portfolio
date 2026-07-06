@@ -1,5 +1,7 @@
 const express = require('express');
 const cors = require('cors');
+const path = require('path');
+const fs = require('fs');
 const db = require('./config/database');
 const investmentRoutes = require('./routes/investments');
 const analyticsRoutes = require('./routes/analytics');
@@ -27,10 +29,20 @@ app.use('/api/analytics', analyticsRoutes);
 app.use('/api/categories', categoriesRoutes);
 app.use('/api/portfolio', portfolioRoutes);
 
-// Root endpoint
-app.get('/', (req, res) => {
-  res.send('Portfolio Management Backend API');
-});
+// Serve Angular frontend when bundled in single-container image (./public)
+const publicPath = path.join(__dirname, 'public');
+const hasFrontend = fs.existsSync(path.join(publicPath, 'index.html'));
+
+if (hasFrontend) {
+  app.use(express.static(publicPath));
+  app.get(/^(?!\/api).*/, (req, res) => {
+    res.sendFile(path.join(publicPath, 'index.html'));
+  });
+} else {
+  app.get('/', (req, res) => {
+    res.send('Portfolio Management Backend API');
+  });
+}
 
 // Initialize database and start server
 db.initializeDatabase()

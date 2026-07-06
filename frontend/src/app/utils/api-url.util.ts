@@ -13,7 +13,13 @@ export function normalizeApiDomain(domain: string): string {
 
 export function getApiDomain(): string {
   const stored = localStorage.getItem('apiDomain');
-  return normalizeApiDomain(stored || 'http://localhost:3000');
+  if (stored) {
+    return normalizeApiDomain(stored);
+  }
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    return window.location.origin;
+  }
+  return 'http://localhost:3000';
 }
 
 export function getApiBaseUrl(): string {
