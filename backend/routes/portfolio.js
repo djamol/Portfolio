@@ -87,14 +87,8 @@ router.post('/import', async (req, res) => {
 
 router.get('/export/sql', async (req, res) => {
   try {
-    if (isMongoDb()) {
-      return res.status(400).json({
-        success: false,
-        error: 'SQL export is not available when DB_TYPE=mongodb. Use /export/mongo instead.'
-      });
-    }
-
-    const pool = getPool();
+    // Works for both mysql and mongodb — Mongo collections are converted to MySQL INSERT statements
+    const pool = isMongoDb() ? null : getPool();
     const { sql, exportedAt } = await exportDatabaseSql(pool);
     const filename = `portfolio_export_${exportedAt.slice(0, 10)}.sql`;
     res.setHeader('Content-Type', 'application/sql; charset=utf-8');

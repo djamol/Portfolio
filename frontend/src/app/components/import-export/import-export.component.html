@@ -18,7 +18,7 @@
       </div>
       <div class="format-card highlight">
         <h4>SQL Export</h4>
-        <p>Full MySQL backup: investments, history, categories, transactions.</p>
+        <p>Full MySQL dump from the current database (MySQL or MongoDB).</p>
         <button class="btn btn-primary" type="button" (click)="exportSql()" [disabled]="loading">
           Export SQL
         </button>
@@ -125,8 +125,9 @@
         <h5>SQL</h5>
         <ul>
           <li>Exports all tables: investments, investment_history, sub_type_names, sub_type_categories, investment_transactions</li>
-          <li><strong>Merge:</strong> adds data without clearing existing records</li>
-          <li><strong>Fresh install:</strong> truncates all tables then imports — like a clean setup</li>
+          <li>Works when backend uses MySQL or MongoDB — Mongo data is converted to MySQL INSERT statements</li>
+          <li><strong>Merge:</strong> adds data without clearing existing records (MySQL backend)</li>
+          <li><strong>Fresh install:</strong> truncates all tables then imports — like a clean setup (MySQL backend)</li>
         </ul>
       </div>
       <div>

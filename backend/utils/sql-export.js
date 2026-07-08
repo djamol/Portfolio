@@ -1,3 +1,6 @@
+const { isMongoDb, getPool } = require('../config/index');
+const mongoStore = require('../db/mongo-store');
+
 const TABLES = [
   'sub_type_names',
   'sub_type_categories',
@@ -19,8 +22,26 @@ function escapeSqlValue(value) {
   if (typeof value === 'boolean') {
     return value ? '1' : '0';
   }
+  if (typeof value === 'object' && value.$date) {
+    return `'${String(value.$date).slice(0, 19).replace('T', ' ')}'`;
+  }
   const str = String(value);
   return `'${str.replace(/\\/g, '\\\\').replace(/'/g, "''")}'`;
+}
+
+function normalizeRowForSql(row) {
+  const out = {};
+  for (const [key, value] of Object.entries(row)) {
+    if (key === '_id') continue;
+    if (value instanceof Date) {
+      out[key] = value;
+    } else if (value && typeof value === 'object' && value.$date) {
+      out[key] = new Date(value.$date);
+    } else {
+      out[key] = value;
+    }
+  }
+  return out;
 }
 
 function buildInsertStatement(table, rows) {
@@ -45,20 +66,36 @@ function buildInsertStatement(table, rows) {
   return chunks.join('\n\n') + '\n';
 }
 
+async function fetchMysqlRows(pool, table) {
+  const [rows] = await pool.query(`SELECT * FROM \`${table}\``);
+  return rows;
+}
+
+async function fetchMongoRows(table) {
+  const rows = await mongoStore.getCollectionData(table);
+  return rows.map(normalizeRowForSql);
+}
+
 async function exportDatabaseSql(pool) {
   const lines = [];
   const exportedAt = new Date().toISOString();
+  const source = isMongoDb() ? 'mongodb' : 'mysql';
 
   lines.push('-- Portfolio Management SQL Export');
   lines.push(`-- Generated: ${exportedAt}`);
+  lines.push(`-- Source: ${source}`);
   lines.push('SET NAMES utf8mb4;');
   lines.push('SET FOREIGN_KEY_CHECKS=0;');
   lines.push('');
 
   const counts = {};
+  const activePool = isMongoDb() ? null : (pool || getPool());
 
   for (const table of TABLES) {
-    const [rows] = await pool.query(`SELECT * FROM \`${table}\``);
+    const rows = isMongoDb()
+      ? await fetchMongoRows(table)
+      : await fetchMysqlRows(activePool, table);
+
     counts[table] = rows.length;
     lines.push(`-- Table: ${table} (${rows.length} rows)`);
     lines.push(`LOCK TABLES \`${table}\` WRITE;`);
@@ -73,7 +110,8 @@ async function exportDatabaseSql(pool) {
   return {
     sql: lines.join('\n'),
     counts,
-    exportedAt
+    exportedAt,
+    source
   };
 }
 
