@@ -1,0 +1,8 @@
+vendor
+composer.lock
+.env
+.env.*
+.git
+.gitignore
+*.md
+.DS_Store
