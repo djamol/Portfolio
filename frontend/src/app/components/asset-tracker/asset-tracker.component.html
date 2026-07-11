@@ -9,12 +9,37 @@
     </button>
   </div>
 
+  <div class="filters-bar">
+    <div class="filters-toolbar">
+      <div class="filters-title">Date Range</div>
+      <label>
+        From
+        <input type="date" [(ngModel)]="filterFrom" class="date-input" [disabled]="loading">
+      </label>
+      <label>
+        To
+        <input type="date" [(ngModel)]="filterTo" class="date-input" [disabled]="loading">
+      </label>
+      <button type="button" class="apply-btn" (click)="applyDateFilter()" [disabled]="loading || !hasDateFilter()">
+        Apply
+      </button>
+      <button type="button" class="clear-btn" (click)="clearDateFilter()" [disabled]="loading || (!hasDateFilter() && !dateFilterActive)">
+        Clear
+      </button>
+      <span class="filter-hint" *ngIf="dateFilterActive">Filtered view active</span>
+    </div>
+  </div>
+
   <div *ngIf="errorMessage" class="error-message">
     <strong>Error:</strong> {{ errorMessage }}<br>
     <small>Make sure the backend server is running on http://localhost:3000</small>
   </div>
 
   <div *ngIf="loading && !stats" class="loading-message">Loading asset tracker data...</div>
+
+  <div *ngIf="!loading && filterEmptyMessage" class="empty-state card">
+    {{ filterEmptyMessage }}
+  </div>
 
   <ng-container *ngIf="stats">
     <!-- KPI Summary -->
@@ -211,7 +236,7 @@
     </div>
   </ng-container>
 
-  <div *ngIf="!loading && !errorMessage && !stats" class="empty-state card">
+  <div *ngIf="!loading && !errorMessage && !stats && !filterEmptyMessage" class="empty-state card">
     No snapshot dates found. Add investment history entries to see asset tracking analytics.
   </div>
 </div>

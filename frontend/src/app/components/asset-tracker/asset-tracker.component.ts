@@ -74,6 +74,13 @@ export class AssetTrackerComponent implements OnInit {
   errorMessage = '';
   currentAmount = 0;
   sortDirection: SortDirection = 'asc';
+  filterFrom = '';
+  filterTo = '';
+  dateFilterActive = false;
+  filterEmptyMessage = '';
+
+  private allSortedDates: string[] = [];
+  private allByDate = new Map<string, number>();
 
   amountDiffChartData: ChartConfiguration<'line'>['data'] = { labels: [], datasets: [] };
   periodChangeChartData: ChartConfiguration<'bar'>['data'] = { labels: [], datasets: [] };
@@ -173,9 +180,27 @@ export class AssetTrackerComponent implements OnInit {
     this.applySort();
   }
 
+  applyDateFilter() {
+    this.dateFilterActive = !!(this.filterFrom || this.filterTo);
+    this.rebuildFromStoredData();
+  }
+
+  clearDateFilter() {
+    this.filterFrom = '';
+    this.filterTo = '';
+    this.dateFilterActive = false;
+    this.filterEmptyMessage = '';
+    this.rebuildFromStoredData();
+  }
+
+  hasDateFilter(): boolean {
+    return !!(this.filterFrom || this.filterTo);
+  }
+
   loadData() {
     this.loading = true;
     this.errorMessage = '';
+    this.filterEmptyMessage = '';
 
     this.analyticsService.getValueSeriesFiltered().subscribe({
       next: (response) => {
@@ -194,17 +219,14 @@ export class AssetTrackerComponent implements OnInit {
           (a, b) => this.parseDateKey(a).getTime() - this.parseDateKey(b).getTime()
         );
 
+        this.allSortedDates = sortedDates;
+        this.allByDate = byDate;
+
         if (sortedDates.length === 0) {
-          this.rows = [];
-          this.displayRows = [];
-          this.stats = null;
-          this.currentTotalBreakdown = null;
-          this.growthBreakdown = null;
-          this.peakBreakdown = null;
-          this.firstAmountBreakdown = null;
-          this.lastSnapshotBreakdown = null;
+          this.allSortedDates = [];
+          this.allByDate = new Map();
           this.currentAmount = 0;
-          this.buildCharts();
+          this.clearView();
           this.loading = false;
           return;
         }
@@ -216,12 +238,12 @@ export class AssetTrackerComponent implements OnInit {
           next: (totalResponse) => {
             const liveTotal = this.toNumber(totalResponse.data?.total_amount);
             this.currentAmount = liveTotal > 0 ? liveTotal : latestSnapshotAmount;
-            this.buildRows(sortedDates, byDate, latestDate);
+            this.rebuildFromStoredData();
             this.loading = false;
           },
           error: () => {
             this.currentAmount = latestSnapshotAmount;
-            this.buildRows(sortedDates, byDate, latestDate);
+            this.rebuildFromStoredData();
             this.loading = false;
           }
         });
@@ -232,6 +254,50 @@ export class AssetTrackerComponent implements OnInit {
         this.loading = false;
       }
     });
+  }
+
+  private rebuildFromStoredData() {
+    if (this.allSortedDates.length === 0) {
+      this.clearView();
+      return;
+    }
+
+    const filteredDates = this.getFilteredDates();
+    if (filteredDates.length === 0) {
+      this.clearView();
+      this.filterEmptyMessage = this.dateFilterActive
+        ? 'No snapshots found in the selected date range.'
+        : '';
+      return;
+    }
+
+    this.filterEmptyMessage = '';
+    const latestInView = filteredDates[filteredDates.length - 1];
+    this.buildRows(filteredDates, this.allByDate, latestInView);
+  }
+
+  private getFilteredDates(): string[] {
+    if (!this.dateFilterActive) {
+      return [...this.allSortedDates];
+    }
+
+    return this.allSortedDates.filter((dateKey) => {
+      if (this.filterFrom && dateKey < this.filterFrom) return false;
+      if (this.filterTo && dateKey > this.filterTo) return false;
+      return true;
+    });
+  }
+
+  private clearView() {
+    this.rows = [];
+    this.displayRows = [];
+    this.stats = null;
+    this.currentTotalBreakdown = null;
+    this.growthBreakdown = null;
+    this.peakBreakdown = null;
+    this.firstAmountBreakdown = null;
+    this.lastSnapshotBreakdown = null;
+    this.buildCharts();
   }
 
   private buildRows(sortedDates: string[], byDate: Map<string, number>, latestDate: string) {
