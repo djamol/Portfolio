@@ -4,29 +4,93 @@
       <h2>Asset Tracker</h2>
       <p class="subtitle">Portfolio analytics by snapshot date — only dates with history entries</p>
     </div>
-    <button type="button" class="refresh-btn" (click)="refresh()" [disabled]="loading">
-      {{ loading ? 'Loading…' : 'Refresh' }}
-    </button>
+    <div class="header-actions">
+      <button type="button" class="refresh-btn" (click)="refresh()" [disabled]="loading">
+        {{ loading ? 'Loading…' : 'Refresh' }}
+      </button>
+      <button
+        type="button"
+        class="advanced-toggle-btn"
+        (click)="toggleAdvancedFilters()"
+        [class.active]="showAdvancedFilters || hasActiveFilters()">
+        Advanced Filters
+        <span *ngIf="hasActiveFilters()" class="filter-active-dot"></span>
+      </button>
+    </div>
   </div>
 
-  <div class="filters-bar">
+  <div class="filters-bar" *ngIf="showAdvancedFilters">
     <div class="filters-toolbar">
-      <div class="filters-title">Date Range</div>
+      <div class="filters-title">Filters</div>
       <label>
         From
-        <input type="date" [(ngModel)]="filterFrom" class="date-input" [disabled]="loading">
+        <input type="date" [(ngModel)]="filterFrom" class="date-input" [disabled]="loading || applyingFilters">
       </label>
       <label>
         To
-        <input type="date" [(ngModel)]="filterTo" class="date-input" [disabled]="loading">
+        <input type="date" [(ngModel)]="filterTo" class="date-input" [disabled]="loading || applyingFilters">
       </label>
-      <button type="button" class="apply-btn" (click)="applyDateFilter()" [disabled]="loading || !hasDateFilter()">
-        Apply
+      <button type="button" class="apply-btn" (click)="applyFilters()" [disabled]="loading || applyingFilters">
+        {{ applyingFilters ? 'Applying…' : 'Apply' }}
       </button>
-      <button type="button" class="clear-btn" (click)="clearDateFilter()" [disabled]="loading || (!hasDateFilter() && !dateFilterActive)">
+      <button type="button" class="clear-btn" (click)="clearFilters()" [disabled]="loading || applyingFilters || !hasActiveFilters()">
         Clear
       </button>
-      <span class="filter-hint" *ngIf="dateFilterActive">Filtered view active</span>
+      <span class="filter-hint" *ngIf="hasActiveFilters()">Filtered view active</span>
+    </div>
+
+    <div class="advanced-filters-section">
+      <div class="advanced-filters-grid">
+        <app-multi-select-filter
+          label="Type"
+          [options]="investmentTypes"
+          placeholder="All Types"
+          allLabel="All Types"
+          [(selected)]="filterTypes"
+          (selectedChange)="onAdvancedTypeChange()">
+        </app-multi-select-filter>
+
+        <app-multi-select-filter
+          label="Sub Type"
+          [options]="availableFilterSubTypes"
+          placeholder="All Sub Types"
+          allLabel="All Sub Types"
+          [(selected)]="filterSubTypes"
+          (selectedChange)="onAdvancedSubTypeChange()">
+        </app-multi-select-filter>
+
+        <app-multi-select-filter
+          label="Category"
+          [options]="availableFilterCategories"
+          placeholder="All Categories"
+          allLabel="All Categories"
+          [(selected)]="filterCategories">
+        </app-multi-select-filter>
+
+        <app-multi-select-filter
+          label="Platform"
+          [options]="filterPlatformsOptions"
+          placeholder="All Platforms"
+          allLabel="All Platforms"
+          [(selected)]="filterPlatforms">
+        </app-multi-select-filter>
+
+        <div class="advanced-filter-group">
+          <label>Price Range (₹)</label>
+          <div class="price-range-inputs">
+            <input type="number" [(ngModel)]="filterMinAmount" class="price-input" placeholder="Min" min="0" step="0.01">
+            <span class="price-range-separator">to</span>
+            <input type="number" [(ngModel)]="filterMaxAmount" class="price-input" placeholder="Max" min="0" step="0.01">
+          </div>
+        </div>
+
+        <div class="advanced-filter-group checkbox-group">
+          <label class="checkbox-label">
+            <input type="checkbox" [(ngModel)]="filterIgnoreZero">
+            Ignore 0 value entries
+          </label>
+        </div>
+      </div>
     </div>
   </div>
 

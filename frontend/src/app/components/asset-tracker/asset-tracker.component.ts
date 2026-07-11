@@ -1,6 +1,8 @@
 import { Component, OnInit } from '@angular/core';
-import { AnalyticsService } from '../../services/analytics.service';
+import { AnalyticsFilters, AnalyticsService } from '../../services/analytics.service';
 import { ChartConfiguration, ChartOptions } from 'chart.js';
+import { INVESTMENT_TYPES } from '../../constants/investment-types.constants';
+import { hasMultiSelectFilter, pruneSelections } from '../../utils/advanced-filter.util';
 import { getIndianAmountBreakdown, IndianAmountBreakdown } from '../../utils/indian-number.util';
 
 export interface AssetTrackerRow {
@@ -74,10 +76,23 @@ export class AssetTrackerComponent implements OnInit {
   errorMessage = '';
   currentAmount = 0;
   sortDirection: SortDirection = 'asc';
+  filterEmptyMessage = '';
+
+  showAdvancedFilters = false;
+  applyingFilters = false;
   filterFrom = '';
   filterTo = '';
-  dateFilterActive = false;
-  filterEmptyMessage = '';
+  filterPlatforms: string[] = [];
+  filterTypes: string[] = [];
+  filterSubTypes: string[] = [];
+  filterCategories: string[] = [];
+  filterMinAmount: number | null = null;
+  filterMaxAmount: number | null = null;
+  filterIgnoreZero = false;
+
+  investmentTypes: string[] = INVESTMENT_TYPES;
+  filterPlatformsOptions: string[] = [];
+  filterSummaryData: any[] = [];
 
   private allSortedDates: string[] = [];
   private allByDate = new Map<string, number>();
@@ -168,6 +183,7 @@ export class AssetTrackerComponent implements OnInit {
   constructor(private analyticsService: AnalyticsService) {}
 
   ngOnInit() {
+    this.loadFilterOptions();
     this.loadData();
   }
 
@@ -180,29 +196,112 @@ export class AssetTrackerComponent implements OnInit {
     this.applySort();
   }
 
-  applyDateFilter() {
-    this.dateFilterActive = !!(this.filterFrom || this.filterTo);
-    this.rebuildFromStoredData();
+  toggleAdvancedFilters() {
+    this.showAdvancedFilters = !this.showAdvancedFilters;
   }
 
-  clearDateFilter() {
+  get availableFilterSubTypes(): string[] {
+    let source = this.filterSummaryData;
+    if (this.filterTypes.length) {
+      source = source.filter((item) => this.filterTypes.includes(item.investment_type));
+    }
+    return [...new Set(source.map((item) => item.sub_type_name))].filter(Boolean).sort();
+  }
+
+  get availableFilterCategories(): string[] {
+    let source = this.filterSummaryData;
+    if (this.filterTypes.length) {
+      source = source.filter((item) => this.filterTypes.includes(item.investment_type));
+    }
+    if (this.filterSubTypes.length) {
+      source = source.filter((item) => this.filterSubTypes.includes(item.sub_type_name));
+    }
+    return [...new Set(source.map((item) => item.sub_type_category))].filter(Boolean).sort();
+  }
+
+  hasActiveFilters(): boolean {
+    return !!(
+      hasMultiSelectFilter(this.filterTypes) ||
+      hasMultiSelectFilter(this.filterSubTypes) ||
+      hasMultiSelectFilter(this.filterCategories) ||
+      hasMultiSelectFilter(this.filterPlatforms) ||
+      this.filterFrom ||
+      this.filterTo ||
+      this.isPriceFilterActive() ||
+      this.filterIgnoreZero
+    );
+  }
+
+  isPriceFilterActive(): boolean {
+    return (this.filterMinAmount !== null && this.filterMinAmount !== undefined && !Number.isNaN(this.filterMinAmount)) ||
+      (this.filterMaxAmount !== null && this.filterMaxAmount !== undefined && !Number.isNaN(this.filterMaxAmount));
+  }
+
+  onAdvancedTypeChange() {
+    this.filterSubTypes = pruneSelections(this.filterSubTypes, this.availableFilterSubTypes);
+    this.filterCategories = pruneSelections(this.filterCategories, this.availableFilterCategories);
+  }
+
+  onAdvancedSubTypeChange() {
+    this.filterCategories = pruneSelections(this.filterCategories, this.availableFilterCategories);
+  }
+
+  getAnalyticsFilters(): AnalyticsFilters {
+    return {
+      from: this.filterFrom || undefined,
+      to: this.filterTo || undefined,
+      platform: this.filterPlatforms,
+      type: this.filterTypes,
+      subType: this.filterSubTypes,
+      category: this.filterCategories,
+      minAmount: this.filterMinAmount,
+      maxAmount: this.filterMaxAmount,
+      ignoreZero: this.filterIgnoreZero
+    };
+  }
+
+  applyFilters() {
+    this.applyingFilters = true;
+    this.loadData();
+  }
+
+  clearFilters() {
+    this.filterPlatforms = [];
+    this.filterTypes = [];
+    this.filterSubTypes = [];
+    this.filterCategories = [];
     this.filterFrom = '';
     this.filterTo = '';
-    this.dateFilterActive = false;
+    this.filterMinAmount = null;
+    this.filterMaxAmount = null;
+    this.filterIgnoreZero = false;
     this.filterEmptyMessage = '';
-    this.rebuildFromStoredData();
+    this.applyingFilters = true;
+    this.loadData();
   }
 
-  hasDateFilter(): boolean {
-    return !!(this.filterFrom || this.filterTo);
+  loadFilterOptions() {
+    this.analyticsService.getSummaryTable().subscribe({
+      next: (response) => {
+        if (response.data) {
+          this.filterSummaryData = response.data;
+          this.filterPlatformsOptions = [...new Set(response.data.map((item: any) => item.website_app_name))]
+            .filter(Boolean)
+            .sort();
+        }
+      },
+      error: (error) => console.error('Error loading filter options:', error)
+    });
   }
 
   loadData() {
     this.loading = true;
     this.errorMessage = '';
     this.filterEmptyMessage = '';
+    const filters = this.getAnalyticsFilters();
+    const hasScopedFilters = this.hasScopedFilters();
 
-    this.analyticsService.getValueSeriesFiltered().subscribe({
+    this.analyticsService.getValueSeriesFiltered(filters).subscribe({
       next: (response) => {
         const rawRows = response.data?.rows || [];
         const byDate = new Map<string, number>();
@@ -227,33 +326,59 @@ export class AssetTrackerComponent implements OnInit {
           this.allByDate = new Map();
           this.currentAmount = 0;
           this.clearView();
-          this.loading = false;
+          this.filterEmptyMessage = this.hasActiveFilters()
+            ? 'No snapshots found for the selected filters.'
+            : '';
+          this.finishLoading();
           return;
         }
 
         const latestDate = sortedDates[sortedDates.length - 1];
         const latestSnapshotAmount = byDate.get(latestDate) ?? 0;
 
+        if (hasScopedFilters) {
+          this.currentAmount = latestSnapshotAmount;
+          this.rebuildFromStoredData();
+          this.finishLoading();
+          return;
+        }
+
         this.analyticsService.getTotal().subscribe({
           next: (totalResponse) => {
             const liveTotal = this.toNumber(totalResponse.data?.total_amount);
             this.currentAmount = liveTotal > 0 ? liveTotal : latestSnapshotAmount;
             this.rebuildFromStoredData();
-            this.loading = false;
+            this.finishLoading();
           },
           error: () => {
             this.currentAmount = latestSnapshotAmount;
             this.rebuildFromStoredData();
-            this.loading = false;
+            this.finishLoading();
           }
         });
       },
       error: (error) => {
         console.error('Error loading asset tracker data:', error);
         this.errorMessage = 'Failed to load asset tracker data. ' + (error.message || 'Please check if backend is running.');
-        this.loading = false;
+        this.finishLoading();
       }
     });
+  }
+
+  private hasScopedFilters(): boolean {
+    return !!(
+      hasMultiSelectFilter(this.filterTypes) ||
+      hasMultiSelectFilter(this.filterSubTypes) ||
+      hasMultiSelectFilter(this.filterCategories) ||
+      hasMultiSelectFilter(this.filterPlatforms) ||
+      this.isPriceFilterActive() ||
+      this.filterIgnoreZero
+    );
+  }
+
+  private finishLoading() {
+    this.loading = false;
+    this.applyingFilters = false;
   }
 
   private rebuildFromStoredData() {
@@ -262,30 +387,9 @@ export class AssetTrackerComponent implements OnInit {
       return;
     }
 
-    const filteredDates = this.getFilteredDates();
-    if (filteredDates.length === 0) {
-      this.clearView();
-      this.filterEmptyMessage = this.dateFilterActive
-        ? 'No snapshots found in the selected date range.'
-        : '';
-      return;
-    }
-
     this.filterEmptyMessage = '';
-    const latestInView = filteredDates[filteredDates.length - 1];
-    this.buildRows(filteredDates, this.allByDate, latestInView);
-  }
-
-  private getFilteredDates(): string[] {
-    if (!this.dateFilterActive) {
-      return [...this.allSortedDates];
-    }
-
-    return this.allSortedDates.filter((dateKey) => {
-      if (this.filterFrom && dateKey < this.filterFrom) return false;
-      if (this.filterTo && dateKey > this.filterTo) return false;
-      return true;
-    });
+    const latestInView = this.allSortedDates[this.allSortedDates.length - 1];
+    this.buildRows(this.allSortedDates, this.allByDate, latestInView);
   }
 
   private clearView() {
