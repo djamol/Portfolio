@@ -1,3 +1,5 @@
+const { appendIgnorePlatformClause } = require('./ignore-platform');
+
 function parseListParam(value) {
   if (value === undefined || value === null || value === '') {
     return [];
@@ -39,11 +41,15 @@ function buildInvestmentFilterClauses(query, params, alias = 'i') {
 
   const platforms = parseListParam(query.platform);
   if (platforms.length === 1) {
+    // Explicit selection wins (including platforms listed in IGNORE_PLATFORM)
     clauses.push(`${alias}.website_app_name = ?`);
     params.push(platforms[0]);
   } else if (platforms.length > 1) {
     clauses.push(`${alias}.website_app_name IN (${platforms.map(() => '?').join(', ')})`);
     params.push(...platforms);
+  } else {
+    // Default: exclude IGNORE_PLATFORM when user has not selected platforms
+    appendIgnorePlatformClause(clauses, params, `${alias}.website_app_name`);
   }
 
   const types = parseListParam(query.type);

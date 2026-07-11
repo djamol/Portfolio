@@ -5,8 +5,10 @@ import { RouterModule } from '@angular/router';
 import { InvestmentService } from '../../services/investment.service';
 import { AnalyticsService } from '../../services/analytics.service';
 import { CategoryService, SubTypeName, Category } from '../../services/category.service';
+import { ConfigService } from '../../services/config.service';
 import { INVESTMENT_TYPES, INVESTMENT_SUB_TYPES } from '../../constants/investment-types.constants';
 import { hasMultiSelectFilter, matchesMultiSelect, pruneSelections } from '../../utils/advanced-filter.util';
+import { matchesPlatformFilter } from '../../utils/ignore-platform.util';
 
 @Component({
   selector: 'app-investment-list',
@@ -82,12 +84,15 @@ export class InvestmentListComponent implements OnInit {
   constructor(
     private investmentService: InvestmentService,
     private categoryService: CategoryService,
-    private analyticsService: AnalyticsService
+    private analyticsService: AnalyticsService,
+    private configService: ConfigService
   ) {}
 
   ngOnInit() {
-    this.loadDatabaseOptions();
-    this.loadInvestments();
+    this.configService.ensureLoaded().subscribe(() => {
+      this.loadDatabaseOptions();
+      this.loadInvestments();
+    });
   }
 
   loadDatabaseOptions() {
@@ -218,9 +223,13 @@ export class InvestmentListComponent implements OnInit {
       result = result.filter(item => this.selectedTypes.includes(item.investment_type));
     }
 
-    if (this.selectedPlatforms.length) {
-      result = result.filter(item => this.selectedPlatforms.includes(item.website_app_name));
-    }
+    result = result.filter(item =>
+      matchesPlatformFilter(
+        item.website_app_name,
+        this.selectedPlatforms,
+        this.configService.getIgnorePlatforms()
+      )
+    );
 
     if (this.selectedSubTypes.length) {
       result = result.filter(item => matchesMultiSelect(this.selectedSubTypes, item.sub_type_name));

@@ -2,8 +2,10 @@ import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AnalyticsService } from '../../services/analytics.service';
+import { ConfigService } from '../../services/config.service';
 import { INVESTMENT_TYPES } from '../../constants/investment-types.constants';
 import { hasMultiSelectFilter, matchesMultiSelect, pruneSelections } from '../../utils/advanced-filter.util';
+import { matchesPlatformFilter } from '../../utils/ignore-platform.util';
 
 @Component({
   selector: 'app-investment-summary',
@@ -50,10 +52,15 @@ export class InvestmentSummaryComponent implements OnInit {
   subTypes: string[] = [];
   categories: string[] = [];
 
-  constructor(private analyticsService: AnalyticsService) {}
+  constructor(
+    private analyticsService: AnalyticsService,
+    private configService: ConfigService
+  ) {}
 
   ngOnInit() {
-    this.loadSummaryData();
+    this.configService.ensureLoaded().subscribe(() => {
+      this.loadSummaryData();
+    });
   }
 
   loadSummaryData() {
@@ -156,9 +163,13 @@ export class InvestmentSummaryComponent implements OnInit {
       result = result.filter(item => this.selectedTypes.includes(item.investment_type));
     }
 
-    if (this.selectedPlatforms.length) {
-      result = result.filter(item => this.selectedPlatforms.includes(item.website_app_name));
-    }
+    result = result.filter(item =>
+      matchesPlatformFilter(
+        item.website_app_name,
+        this.selectedPlatforms,
+        this.configService.getIgnorePlatforms()
+      )
+    );
 
     if (this.selectedCategories.length) {
       result = result.filter(item => matchesMultiSelect(this.selectedCategories, item.sub_type_category));

@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { isMongoDb, getPool } = require('../config/index');
 const mongoAnalytics = require('../utils/mongo-analytics');
+const { appendIgnorePlatformClause } = require('../utils/ignore-platform');
 const {
   amountAsOfSubquery,
   buildInvestmentFilterClauses,
@@ -9,16 +10,32 @@ const {
   resolveSeriesBreakdown
 } = require('../utils/snapshot-queries');
 
+function defaultIgnoreWhere(alias = '') {
+  const clauses = [];
+  const params = [];
+  const column = alias ? `${alias}.website_app_name` : 'website_app_name';
+  appendIgnorePlatformClause(clauses, params, column);
+  return {
+    sql: clauses.length ? `WHERE ${clauses.join(' AND ')}` : '',
+    params
+  };
+}
+
 router.get('/total', async (req, res) => {
   try {
     if (isMongoDb()) {
       return res.json({ success: true, data: await mongoAnalytics.getTotal() });
     }
     const pool = getPool();
-    const [rows] = await pool.query(`
+    const ignore = defaultIgnoreWhere();
+    const [rows] = await pool.query(
+      `
       SELECT SUM(amount) as total_amount, COUNT(*) as total_investments
       FROM investments
-    `);
+      ${ignore.sql}
+      `,
+      ignore.params
+    );
     res.json({ success: true, data: rows[0] });
   } catch (error) {
     console.error('Error fetching total:', error);
@@ -32,16 +49,21 @@ router.get('/by-type', async (req, res) => {
       return res.json({ success: true, data: await mongoAnalytics.getByType() });
     }
     const pool = getPool();
-    const [rows] = await pool.query(`
+    const ignore = defaultIgnoreWhere();
+    const [rows] = await pool.query(
+      `
       SELECT 
         investment_type,
         COUNT(*) as count,
         SUM(amount) as total_amount,
         AVG(amount) as avg_amount
       FROM investments
+      ${ignore.sql}
       GROUP BY investment_type
       ORDER BY total_amount DESC
-    `);
+      `,
+      ignore.params
+    );
     res.json({ success: true, data: rows });
   } catch (error) {
     console.error('Error fetching by type:', error);
@@ -55,15 +77,20 @@ router.get('/by-month', async (req, res) => {
       return res.json({ success: true, data: await mongoAnalytics.getByMonth() });
     }
     const pool = getPool();
-    const [rows] = await pool.query(`
+    const ignore = defaultIgnoreWhere();
+    const [rows] = await pool.query(
+      `
       SELECT 
         DATE_FORMAT(investment_date, '%Y-%m') as month,
         SUM(amount) as total_amount,
         COUNT(*) as count
       FROM investments
+      ${ignore.sql}
       GROUP BY DATE_FORMAT(investment_date, '%Y-%m')
       ORDER BY month DESC
-    `);
+      `,
+      ignore.params
+    );
     res.json({ success: true, data: rows });
   } catch (error) {
     console.error('Error fetching by month:', error);
@@ -77,15 +104,20 @@ router.get('/by-year', async (req, res) => {
       return res.json({ success: true, data: await mongoAnalytics.getByYear() });
     }
     const pool = getPool();
-    const [rows] = await pool.query(`
+    const ignore = defaultIgnoreWhere();
+    const [rows] = await pool.query(
+      `
       SELECT 
         YEAR(investment_date) as year,
         SUM(amount) as total_amount,
         COUNT(*) as count
       FROM investments
+      ${ignore.sql}
       GROUP BY YEAR(investment_date)
       ORDER BY year DESC
-    `);
+      `,
+      ignore.params
+    );
     res.json({ success: true, data: rows });
   } catch (error) {
     console.error('Error fetching by year:', error);
@@ -99,17 +131,23 @@ router.get('/monthly-changes', async (req, res) => {
       return res.json({ success: true, data: await mongoAnalytics.getMonthlyChanges() });
     }
     const pool = getPool();
-    const [rows] = await pool.query(`
+    const ignore = defaultIgnoreWhere('i');
+    const [rows] = await pool.query(
+      `
       SELECT 
-        DATE_FORMAT(change_date, '%Y-%m') as month,
-        SUM(CASE WHEN change_type = 'added' THEN amount ELSE 0 END) as added,
-        SUM(CASE WHEN change_type = 'removed' THEN amount ELSE 0 END) as removed,
-        SUM(CASE WHEN change_type = 'updated' THEN amount ELSE 0 END) as updated
-      FROM investment_history
-      GROUP BY DATE_FORMAT(change_date, '%Y-%m')
+        DATE_FORMAT(ih.change_date, '%Y-%m') as month,
+        SUM(CASE WHEN ih.change_type = 'added' THEN ih.amount ELSE 0 END) as added,
+        SUM(CASE WHEN ih.change_type = 'removed' THEN ih.amount ELSE 0 END) as removed,
+        SUM(CASE WHEN ih.change_type = 'updated' THEN ih.amount ELSE 0 END) as updated
+      FROM investment_history ih
+      JOIN investments i ON i.id = ih.investment_id
+      ${ignore.sql}
+      GROUP BY DATE_FORMAT(ih.change_date, '%Y-%m')
       ORDER BY month DESC
       LIMIT 12
-    `);
+      `,
+      ignore.params
+    );
     res.json({ success: true, data: rows });
   } catch (error) {
     console.error('Error fetching monthly changes:', error);
@@ -123,16 +161,22 @@ router.get('/yearly-changes', async (req, res) => {
       return res.json({ success: true, data: await mongoAnalytics.getYearlyChanges() });
     }
     const pool = getPool();
-    const [rows] = await pool.query(`
+    const ignore = defaultIgnoreWhere('i');
+    const [rows] = await pool.query(
+      `
       SELECT 
-        YEAR(change_date) as year,
-        SUM(CASE WHEN change_type = 'added' THEN amount ELSE 0 END) as added,
-        SUM(CASE WHEN change_type = 'removed' THEN amount ELSE 0 END) as removed,
-        SUM(CASE WHEN change_type = 'updated' THEN amount ELSE 0 END) as updated
-      FROM investment_history
-      GROUP BY YEAR(change_date)
+        YEAR(ih.change_date) as year,
+        SUM(CASE WHEN ih.change_type = 'added' THEN ih.amount ELSE 0 END) as added,
+        SUM(CASE WHEN ih.change_type = 'removed' THEN ih.amount ELSE 0 END) as removed,
+        SUM(CASE WHEN ih.change_type = 'updated' THEN ih.amount ELSE 0 END) as updated
+      FROM investment_history ih
+      JOIN investments i ON i.id = ih.investment_id
+      ${ignore.sql}
+      GROUP BY YEAR(ih.change_date)
       ORDER BY year DESC
-    `);
+      `,
+      ignore.params
+    );
     res.json({ success: true, data: rows });
   } catch (error) {
     console.error('Error fetching yearly changes:', error);
@@ -146,15 +190,20 @@ router.get('/by-platform', async (req, res) => {
       return res.json({ success: true, data: await mongoAnalytics.getByPlatform() });
     }
     const pool = getPool();
-    const [rows] = await pool.query(`
+    const ignore = defaultIgnoreWhere();
+    const [rows] = await pool.query(
+      `
       SELECT 
         website_app_name,
         COUNT(*) as count,
         SUM(amount) as total_amount
       FROM investments
+      ${ignore.sql}
       GROUP BY website_app_name
       ORDER BY total_amount DESC
-    `);
+      `,
+      ignore.params
+    );
     res.json({ success: true, data: rows });
   } catch (error) {
     console.error('Error fetching by platform:', error);
@@ -168,14 +217,19 @@ router.get('/growth', async (req, res) => {
       return res.json({ success: true, data: await mongoAnalytics.getGrowth() });
     }
     const pool = getPool();
-    const [rows] = await pool.query(`
+    const ignore = defaultIgnoreWhere();
+    const [rows] = await pool.query(
+      `
       SELECT 
         DATE_FORMAT(investment_date, '%Y-%m') as month,
         SUM(amount) OVER (ORDER BY DATE_FORMAT(investment_date, '%Y-%m') ASC) as cumulative_amount
       FROM investments
+      ${ignore.sql}
       GROUP BY DATE_FORMAT(investment_date, '%Y-%m')
       ORDER BY month ASC
-    `);
+      `,
+      ignore.params
+    );
     res.json({ success: true, data: rows });
   } catch (error) {
     console.error('Error fetching growth:', error);
@@ -471,6 +525,10 @@ router.get('/delta', async (req, res) => {
     }
 
     const pool = getPool();
+    const ignore = defaultIgnoreWhere('i');
+    const whereExtra = ignore.sql
+      ? `AND ${ignore.sql.replace(/^WHERE\s+/i, '')}`
+      : '';
     const [rows] = await pool.query(
       `
       WITH a AS (
@@ -495,10 +553,11 @@ router.get('/delta', async (req, res) => {
       FROM investments i
       LEFT JOIN a ON a.investment_id = i.id
       LEFT JOIN b ON b.investment_id = i.id
-      WHERE COALESCE(b.amount, 0) <> 0 OR COALESCE(a.amount, 0) <> 0
+      WHERE (COALESCE(b.amount, 0) <> 0 OR COALESCE(a.amount, 0) <> 0)
+      ${whereExtra}
       ORDER BY delta DESC
       `,
-      [fromDate, toDate]
+      [fromDate, toDate, ...ignore.params]
     );
 
     res.json({
@@ -543,16 +602,24 @@ router.get('/by-sub-type-name', async (req, res) => {
     }
 
     const pool = getPool();
-    const [rows] = await pool.query(`
+    const ignore = defaultIgnoreWhere();
+    const whereParts = [`sub_type_name IS NOT NULL AND sub_type_name != ''`];
+    if (ignore.sql) {
+      whereParts.push(ignore.sql.replace(/^WHERE\s+/i, ''));
+    }
+    const [rows] = await pool.query(
+      `
       SELECT 
         sub_type_name,
         COUNT(*) as count,
         SUM(amount) as total_amount
       FROM investments
-      WHERE sub_type_name IS NOT NULL AND sub_type_name != ''
+      WHERE ${whereParts.join(' AND ')}
       GROUP BY sub_type_name
       ORDER BY total_amount DESC
-    `);
+      `,
+      ignore.params
+    );
     res.json({ success: true, data: rows });
   } catch (error) {
     console.error('Error fetching by sub type name:', error);
@@ -567,16 +634,24 @@ router.get('/by-sub-type-category', async (req, res) => {
     }
 
     const pool = getPool();
-    const [rows] = await pool.query(`
+    const ignore = defaultIgnoreWhere();
+    const whereParts = [`sub_type_category IS NOT NULL AND sub_type_category != ''`];
+    if (ignore.sql) {
+      whereParts.push(ignore.sql.replace(/^WHERE\s+/i, ''));
+    }
+    const [rows] = await pool.query(
+      `
       SELECT 
         sub_type_category,
         COUNT(*) as count,
         SUM(amount) as total_amount
       FROM investments
-      WHERE sub_type_category IS NOT NULL AND sub_type_category != ''
+      WHERE ${whereParts.join(' AND ')}
       GROUP BY sub_type_category
       ORDER BY total_amount DESC
-    `);
+      `,
+      ignore.params
+    );
     res.json({ success: true, data: rows });
   } catch (error) {
     console.error('Error fetching by sub type category:', error);

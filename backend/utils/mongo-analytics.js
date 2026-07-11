@@ -4,6 +4,7 @@ const {
   parseNumberParam,
   buildInvestmentFilterClauses: buildSqlInvestmentFilterClauses
 } = require('./snapshot-queries');
+const { isIgnoredPlatform } = require('./ignore-platform');
 
 function toDateString(value) {
   if (!value) return null;
@@ -11,9 +12,17 @@ function toDateString(value) {
   return String(value).slice(0, 10);
 }
 
+function withoutIgnoredPlatforms(investments) {
+  return investments.filter((i) => !isIgnoredPlatform(i.website_app_name));
+}
+
 function matchesFilters(investment, query) {
   const platforms = parseListParam(query.platform);
-  if (platforms.length && !platforms.includes(investment.website_app_name)) return false;
+  if (platforms.length) {
+    if (!platforms.includes(investment.website_app_name)) return false;
+  } else if (isIgnoredPlatform(investment.website_app_name)) {
+    return false;
+  }
 
   const types = parseListParam(query.type);
   if (types.length && !types.includes(investment.investment_type)) return false;
@@ -71,14 +80,15 @@ async function loadCoreData() {
 
 async function getTotal() {
   const { investments } = await loadCoreData();
-  const total_amount = investments.reduce((sum, i) => sum + Number(i.amount), 0);
-  return { total_amount, total_investments: investments.length };
+  const visible = withoutIgnoredPlatforms(investments);
+  const total_amount = visible.reduce((sum, i) => sum + Number(i.amount), 0);
+  return { total_amount, total_investments: visible.length };
 }
 
 async function getByType() {
   const { investments } = await loadCoreData();
   return groupBy(
-    investments,
+    withoutIgnoredPlatforms(investments),
     (i) => i.investment_type,
     (type, items) => ({
       investment_type: type,
@@ -92,7 +102,7 @@ async function getByType() {
 async function getByMonth() {
   const { investments } = await loadCoreData();
   return groupBy(
-    investments,
+    withoutIgnoredPlatforms(investments),
     (i) => toDateString(i.investment_date).slice(0, 7),
     (month, items) => ({
       month,
@@ -105,7 +115,7 @@ async function getByMonth() {
 async function getByYear() {
   const { investments } = await loadCoreData();
   return groupBy(
-    investments,
+    withoutIgnoredPlatforms(investments),
     (i) => Number(toDateString(i.investment_date).slice(0, 4)),
     (year, items) => ({
       year,
@@ -116,9 +126,13 @@ async function getByYear() {
 }
 
 async function getMonthlyChanges() {
-  const { history } = await loadCoreData();
+  const { history, investmentsById } = await loadCoreData();
+  const visibleHistory = history.filter((h) => {
+    const inv = investmentsById[h.investment_id];
+    return inv && !isIgnoredPlatform(inv.website_app_name);
+  });
   const grouped = groupBy(
-    history,
+    visibleHistory,
     (h) => toDateString(h.change_date).slice(0, 7),
     (month, items) => ({
       month,
@@ -131,9 +145,13 @@ async function getMonthlyChanges() {
 }
 
 async function getYearlyChanges() {
-  const { history } = await loadCoreData();
+  const { history, investmentsById } = await loadCoreData();
+  const visibleHistory = history.filter((h) => {
+    const inv = investmentsById[h.investment_id];
+    return inv && !isIgnoredPlatform(inv.website_app_name);
+  });
   return groupBy(
-    history,
+    visibleHistory,
     (h) => Number(toDateString(h.change_date).slice(0, 4)),
     (year, items) => ({
       year,
@@ -147,7 +165,7 @@ async function getYearlyChanges() {
 async function getByPlatform() {
   const { investments } = await loadCoreData();
   return groupBy(
-    investments,
+    withoutIgnoredPlatforms(investments),
     (i) => i.website_app_name,
     (platform, items) => ({
       website_app_name: platform,
@@ -159,7 +177,7 @@ async function getByPlatform() {
 
 async function getBySubTypeName() {
   const { investments } = await loadCoreData();
-  const filtered = investments.filter((i) => i.sub_type_name);
+  const filtered = withoutIgnoredPlatforms(investments).filter((i) => i.sub_type_name);
   return groupBy(
     filtered,
     (i) => i.sub_type_name,
@@ -173,7 +191,7 @@ async function getBySubTypeName() {
 
 async function getBySubTypeCategory() {
   const { investments } = await loadCoreData();
-  const filtered = investments.filter((i) => i.sub_type_category);
+  const filtered = withoutIgnoredPlatforms(investments).filter((i) => i.sub_type_category);
   return groupBy(
     filtered,
     (i) => i.sub_type_category,
@@ -188,7 +206,7 @@ async function getBySubTypeCategory() {
 async function getGrowth() {
   const { investments } = await loadCoreData();
   const byMonth = groupBy(
-    investments,
+    withoutIgnoredPlatforms(investments),
     (i) => toDateString(i.investment_date).slice(0, 7),
     (month, items) => ({
       month,
@@ -395,7 +413,7 @@ async function getDelta(fromDate, toDate) {
     history.filter((h) => toDateString(h.change_date) === toDateString(toDate)).map((h) => [h.investment_id, Number(h.amount)])
   );
 
-  return investments
+  return withoutIgnoredPlatforms(investments)
     .map((i) => {
       const amount_from = fromMap[i.id] || 0;
       const amount_to = toMap[i.id] || 0;
