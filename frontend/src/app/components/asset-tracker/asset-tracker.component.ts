@@ -53,9 +53,32 @@ export interface AssetTrackerStats {
   lastPeriodChange: number;
   lastPeriodChangePercent: number;
   insights: string[];
+  winRate: number;
+  avgPeriodPercent: number;
+  volatilityPercent: number;
+  maxGapDays: number;
+  avgGapDays: number;
+  healthScore: number;
+  healthLabel: string;
+  healthHints: string[];
+}
+
+export interface MonthlyReportRow {
+  monthKey: string;
+  monthLabel: string;
+  startAmount: number;
+  endAmount: number;
+  change: number;
+  changePercent: number;
+  snapshotCount: number;
+  bestPercent: number;
+  worstPercent: number;
 }
 
 type SortDirection = 'asc' | 'desc';
+type RangePreset = '3m' | '6m' | '1y' | 'ytd' | 'all';
+
+const GOAL_STORAGE_KEY = 'asset-tracker-goal-amount';
 
 @Component({
   selector: 'app-asset-tracker',
@@ -104,8 +127,35 @@ export class AssetTrackerComponent implements OnInit {
   private allByDate = new Map<string, number>();
 
   amountDiffChartData: ChartConfiguration<'line'>['data'] = { labels: [], datasets: [] };
-  periodChangeChartData: ChartConfiguration<'bar'>['data'] = { labels: [], datasets: [] };
+  periodChangeChartData: ChartConfiguration['data'] = { labels: [], datasets: [] };
   growthChartData: ChartConfiguration<'line'>['data'] = { labels: [], datasets: [] };
+  cumulativeChartData: ChartConfiguration<'line'>['data'] = { labels: [], datasets: [] };
+  allocationChartData: ChartConfiguration<'doughnut'>['data'] = {
+    labels: [],
+    datasets: [{
+      data: [],
+      backgroundColor: [
+        'rgba(102, 126, 234, 0.85)',
+        'rgba(16, 185, 129, 0.85)',
+        'rgba(245, 158, 11, 0.85)',
+        'rgba(239, 68, 68, 0.85)',
+        'rgba(118, 75, 162, 0.85)',
+        'rgba(59, 130, 246, 0.85)',
+        'rgba(236, 72, 153, 0.85)',
+        'rgba(14, 165, 233, 0.85)'
+      ]
+    }]
+  };
+
+  monthlyReport: MonthlyReportRow[] = [];
+  activeRangePreset: RangePreset | null = null;
+  goalAmount: number | null = null;
+  goalInput: number | null = null;
+  goalProgressPercent = 0;
+  goalRemaining = 0;
+  showGoalEditor = false;
+  allocationLoading = false;
+  allocationEmpty = false;
 
   private readonly inrTooltip = (value: number) =>
     '₹' + value.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -144,17 +194,17 @@ export class AssetTrackerComponent implements OnInit {
     }
   };
 
-  periodChangeChartOptions: ChartOptions<'bar'> = {
+  periodChangeChartOptions: ChartOptions = {
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
-      legend: { display: false },
+      legend: { display: true, position: 'top' },
       tooltip: {
         callbacks: {
           label: (context) => {
             const value = context.parsed.y ?? 0;
             const prefix = value >= 0 ? '+' : '';
-            return `Change: ${prefix}${value.toFixed(2)}%`;
+            return `${context.dataset.label}: ${prefix}${value.toFixed(2)}%`;
           }
         }
       }
@@ -186,11 +236,170 @@ export class AssetTrackerComponent implements OnInit {
     }
   };
 
+  cumulativeChartOptions: ChartOptions<'line'> = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: true, position: 'top' },
+      tooltip: {
+        callbacks: {
+          label: (context) => `${context.dataset.label}: ${(context.parsed.y ?? 0).toFixed(2)}`
+        }
+      }
+    },
+    scales: {
+      y: {
+        title: { display: true, text: 'Indexed (first snapshot = 100)' },
+        ticks: { callback: (value) => Number(value).toFixed(0) }
+      }
+    }
+  };
+
+  allocationChartOptions: ChartOptions<'doughnut'> = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: true, position: 'right' },
+      tooltip: {
+        callbacks: {
+          label: (context) => {
+            const value = Number(context.parsed) || 0;
+            const total = (context.dataset.data as number[]).reduce((a, b) => a + (Number(b) || 0), 0);
+            const pct = total > 0 ? (value / total) * 100 : 0;
+            return `${context.label}: ${this.inrTooltip(value)} (${pct.toFixed(1)}%)`;
+          }
+        }
+      }
+    }
+  };
+
   constructor(private analyticsService: AnalyticsService) {}
 
   ngOnInit() {
+    this.loadGoalFromStorage();
     this.loadFilterOptions();
     this.loadData();
+  }
+
+  applyRangePreset(preset: RangePreset) {
+    this.activeRangePreset = preset;
+    const today = new Date();
+    const toKey = this.toDateKey(today);
+
+    if (preset === 'all') {
+      this.filterFrom = '';
+      this.filterTo = '';
+    } else if (preset === 'ytd') {
+      this.filterFrom = `${today.getFullYear()}-01-01`;
+      this.filterTo = toKey;
+    } else {
+      const months = preset === '3m' ? 3 : preset === '6m' ? 6 : 12;
+      const from = new Date(today.getFullYear(), today.getMonth() - months, today.getDate());
+      this.filterFrom = this.toDateKey(from);
+      this.filterTo = toKey;
+    }
+
+    this.showAdvancedFilters = true;
+    this.applyingFilters = true;
+    this.loadData();
+  }
+
+  toggleGoalEditor() {
+    this.showGoalEditor = !this.showGoalEditor;
+    if (this.showGoalEditor) {
+      this.goalInput = this.goalAmount;
+    }
+  }
+
+  saveGoal() {
+    const value = this.goalInput;
+    if (value === null || value === undefined || Number.isNaN(value) || value <= 0) {
+      this.clearGoal();
+      return;
+    }
+    this.goalAmount = value;
+    try {
+      localStorage.setItem(GOAL_STORAGE_KEY, String(value));
+    } catch { /* ignore */ }
+    this.updateGoalProgress();
+    this.showGoalEditor = false;
+  }
+
+  clearGoal() {
+    this.goalAmount = null;
+    this.goalInput = null;
+    this.goalProgressPercent = 0;
+    this.goalRemaining = 0;
+    this.showGoalEditor = false;
+    try {
+      localStorage.removeItem(GOAL_STORAGE_KEY);
+    } catch { /* ignore */ }
+  }
+
+  exportCsv() {
+    if (!this.displayRows.length) return;
+
+    const headers = [
+      'Date',
+      'Amount',
+      'Diff Previous',
+      'Period %',
+      'Days Gap',
+      'Diff in L',
+      'Months to Latest',
+      'Diff vs Current',
+      '% vs Current'
+    ];
+    const lines = this.displayRows.map((row) => [
+      row.date,
+      row.amount.toFixed(2),
+      row.diffPreviousDate.toFixed(2),
+      row.diffPreviousPercent.toFixed(4),
+      row.daysSincePrevious ?? '',
+      row.diffInL.toFixed(4),
+      row.monthsDiff,
+      row.diffWithCurrent.toFixed(2),
+      row.percent.toFixed(4)
+    ].join(','));
+
+    const csv = [headers.join(','), ...lines].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    const stamp = this.toDateKey(new Date());
+    anchor.href = url;
+    anchor.download = `asset-tracker-snapshots-${stamp}.csv`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
+  healthToneClass(): string {
+    const score = this.stats?.healthScore ?? 0;
+    if (score >= 75) return 'health-good';
+    if (score >= 50) return 'health-ok';
+    return 'health-low';
+  }
+
+  private loadGoalFromStorage() {
+    try {
+      const raw = localStorage.getItem(GOAL_STORAGE_KEY);
+      if (!raw) return;
+      const value = parseFloat(raw);
+      if (Number.isFinite(value) && value > 0) {
+        this.goalAmount = value;
+        this.goalInput = value;
+      }
+    } catch { /* ignore */ }
+  }
+
+  private updateGoalProgress() {
+    if (!this.goalAmount || this.goalAmount <= 0) {
+      this.goalProgressPercent = 0;
+      this.goalRemaining = 0;
+      return;
+    }
+    this.goalProgressPercent = Math.min(100, (this.currentAmount / this.goalAmount) * 100);
+    this.goalRemaining = Math.max(0, this.goalAmount - this.currentAmount);
   }
 
   refresh() {
@@ -267,6 +476,7 @@ export class AssetTrackerComponent implements OnInit {
   }
 
   applyFilters() {
+    this.activeRangePreset = null;
     this.applyingFilters = true;
     this.loadData();
   }
@@ -284,6 +494,7 @@ export class AssetTrackerComponent implements OnInit {
     this.filterIgnoreExtremePercent = true;
     this.filterIgnoreFloorPercent = true;
     this.filterEmptyMessage = '';
+    this.activeRangePreset = 'all';
     this.applyingFilters = true;
     this.loadData();
   }
@@ -402,18 +613,68 @@ export class AssetTrackerComponent implements OnInit {
     this.filterEmptyMessage = '';
     const latestInView = this.allSortedDates[this.allSortedDates.length - 1];
     this.buildRows(this.allSortedDates, this.allByDate, latestInView);
+    this.updateGoalProgress();
+    this.loadAllocation();
   }
 
   private clearView() {
     this.rows = [];
     this.displayRows = [];
     this.stats = null;
+    this.monthlyReport = [];
     this.currentTotalBreakdown = null;
     this.growthBreakdown = null;
     this.peakBreakdown = null;
     this.firstAmountBreakdown = null;
     this.lastSnapshotBreakdown = null;
+    this.goalProgressPercent = 0;
+    this.goalRemaining = 0;
+    this.allocationEmpty = true;
+    this.allocationChartData = {
+      labels: [],
+      datasets: [{
+        ...this.allocationChartData.datasets[0],
+        data: []
+      }]
+    };
     this.buildCharts();
+  }
+
+  private loadAllocation() {
+    this.allocationLoading = true;
+    this.allocationEmpty = false;
+    this.analyticsService.getAllocationLatestFiltered(this.getAnalyticsFilters()).subscribe({
+      next: (response) => {
+        const rows = response.data || [];
+        if (!rows.length) {
+          this.allocationEmpty = true;
+          this.allocationChartData = {
+            labels: [],
+            datasets: [{
+              ...this.allocationChartData.datasets[0],
+              data: []
+            }]
+          };
+        } else {
+          const sorted = [...rows].sort(
+            (a, b) => this.toNumber(b.value) - this.toNumber(a.value)
+          );
+          this.allocationEmpty = false;
+          this.allocationChartData = {
+            labels: sorted.map((r) => r.investment_type),
+            datasets: [{
+              ...this.allocationChartData.datasets[0],
+              data: sorted.map((r) => this.toNumber(r.value))
+            }]
+          };
+        }
+        this.allocationLoading = false;
+      },
+      error: () => {
+        this.allocationEmpty = true;
+        this.allocationLoading = false;
+      }
+    });
   }
 
   private buildRows(sortedDates: string[], byDate: Map<string, number>, latestDate: string) {
@@ -449,6 +710,7 @@ export class AssetTrackerComponent implements OnInit {
     });
 
     this.computeStats(latestDate);
+    this.buildMonthlyReport();
     this.currentTotalBreakdown = getIndianAmountBreakdown(this.currentAmount);
     this.growthBreakdown = getIndianAmountBreakdown(this.stats?.totalGrowth ?? 0);
     this.peakBreakdown = getIndianAmountBreakdown(this.stats?.highestAmount ?? 0);
@@ -474,12 +736,33 @@ export class AssetTrackerComponent implements OnInit {
 
     const periodRows = this.rows.slice(1);
     const periodChanges = periodRows.map((r) => r.diffPreviousDate);
+    const periodPercents = periodRows.map((r) => r.diffPreviousPercent);
     const avgPeriodChange = periodChanges.length
       ? periodChanges.reduce((a, b) => a + b, 0) / periodChanges.length
       : 0;
+    const avgPeriodPercent = periodPercents.length
+      ? periodPercents.reduce((a, b) => a + b, 0) / periodPercents.length
+      : 0;
+
+    let volatilityPercent = 0;
+    if (periodPercents.length > 1) {
+      const variance = periodPercents.reduce((sum, p) => sum + Math.pow(p - avgPeriodPercent, 2), 0)
+        / periodPercents.length;
+      volatilityPercent = Math.sqrt(variance);
+    }
 
     const positivePeriods = periodRows.filter((r) => r.diffPreviousDate > 0).length;
     const negativePeriods = periodRows.filter((r) => r.diffPreviousDate < 0).length;
+    const totalPeriods = periodRows.length;
+    const winRate = totalPeriods > 0 ? (positivePeriods / totalPeriods) * 100 : 0;
+
+    const gaps = periodRows
+      .map((r) => r.daysSincePrevious)
+      .filter((d): d is number => d !== null);
+    const maxGapDays = gaps.length ? Math.max(...gaps) : 0;
+    const avgGapDays = gaps.length
+      ? gaps.reduce((a, b) => a + b, 0) / gaps.length
+      : 0;
 
     let bestPeriod = periodRows.length > 0 ? periodRows[0] : null;
     let worstPeriod = periodRows.length > 0 ? periodRows[0] : null;
@@ -541,7 +824,20 @@ export class AssetTrackerComponent implements OnInit {
       bestPeriodPercent: bestPeriod?.diffPreviousPercent ?? 0,
       worstPeriodLabel: worstPeriod?.dateLabel ?? '',
       worstPeriodPercent: worstPeriod?.diffPreviousPercent ?? 0,
-      cagr
+      cagr,
+      winRate,
+      volatilityPercent,
+      maxGapDays
+    });
+
+    const { healthScore, healthLabel, healthHints } = this.computeHealthScore({
+      winRate,
+      daysSinceLastSnapshot,
+      drawdownFromPeakPercent,
+      volatilityPercent,
+      maxGapDays,
+      avgGapDays,
+      snapshotCount: this.rows.length
     });
 
     this.stats = {
@@ -577,7 +873,15 @@ export class AssetTrackerComponent implements OnInit {
       worstPeriodPercent: worstPeriod?.diffPreviousPercent ?? 0,
       lastPeriodChange,
       lastPeriodChangePercent,
-      insights
+      insights,
+      winRate,
+      avgPeriodPercent,
+      volatilityPercent,
+      maxGapDays,
+      avgGapDays,
+      healthScore,
+      healthLabel,
+      healthHints
     };
   }
 
@@ -598,6 +902,9 @@ export class AssetTrackerComponent implements OnInit {
     worstPeriodLabel: string;
     worstPeriodPercent: number;
     cagr: number | null;
+    winRate: number;
+    volatilityPercent: number;
+    maxGapDays: number;
   }): string[] {
     const insights: string[] = [];
 
@@ -625,7 +932,13 @@ export class AssetTrackerComponent implements OnInit {
 
     const totalPeriods = ctx.snapshotCount - 1;
     if (totalPeriods > 0) {
-      insights.push(`${ctx.positivePeriods} up / ${ctx.negativePeriods} down periods across ${totalPeriods} intervals.`);
+      insights.push(
+        `${ctx.positivePeriods} up / ${ctx.negativePeriods} down periods · win rate ${ctx.winRate.toFixed(0)}% · vol ${ctx.volatilityPercent.toFixed(1)}%.`
+      );
+    }
+
+    if (ctx.maxGapDays >= 45) {
+      insights.push(`Largest snapshot gap is ${ctx.maxGapDays} days — denser history improves trend accuracy.`);
     }
 
     if (ctx.bestPeriodPercent > 0 && ctx.bestPeriodLabel) {
@@ -640,6 +953,109 @@ export class AssetTrackerComponent implements OnInit {
     }
 
     return insights;
+  }
+
+  private computeHealthScore(ctx: {
+    winRate: number;
+    daysSinceLastSnapshot: number;
+    drawdownFromPeakPercent: number;
+    volatilityPercent: number;
+    maxGapDays: number;
+    avgGapDays: number;
+    snapshotCount: number;
+  }): { healthScore: number; healthLabel: string; healthHints: string[] } {
+    let score = 0;
+    const hints: string[] = [];
+
+    // Win rate (0–30)
+    const winPts = Math.min(30, (ctx.winRate / 100) * 30);
+    score += winPts;
+    if (ctx.winRate < 45) hints.push('More down periods than usual — review recent movers.');
+
+    // Freshness (0–25)
+    let freshPts = 0;
+    if (ctx.daysSinceLastSnapshot <= 7) freshPts = 25;
+    else if (ctx.daysSinceLastSnapshot <= 21) freshPts = 18;
+    else if (ctx.daysSinceLastSnapshot <= 45) freshPts = 10;
+    else freshPts = 3;
+    score += freshPts;
+    if (ctx.daysSinceLastSnapshot > 14) {
+      hints.push(`Last snapshot was ${ctx.daysSinceLastSnapshot} days ago — add a fresh entry.`);
+    }
+
+    // Drawdown resilience (0–25)
+    const dd = Math.abs(Math.min(0, ctx.drawdownFromPeakPercent));
+    let ddPts = 25;
+    if (dd > 20) ddPts = 5;
+    else if (dd > 10) ddPts = 12;
+    else if (dd > 5) ddPts = 18;
+    else if (dd > 1) ddPts = 22;
+    score += ddPts;
+    if (dd > 5) hints.push(`${dd.toFixed(1)}% below peak — watch recovery path.`);
+
+    // Consistency / cadence (0–20)
+    let cadencePts = 20;
+    if (ctx.maxGapDays > 60) cadencePts = 6;
+    else if (ctx.maxGapDays > 35) cadencePts = 12;
+    else if (ctx.avgGapDays > 20) cadencePts = 14;
+    if (ctx.volatilityPercent > 15) cadencePts = Math.max(4, cadencePts - 6);
+    score += cadencePts;
+    if (ctx.snapshotCount < 4) hints.push('Few snapshots yet — score stabilizes with more history.');
+
+    score = Math.round(Math.max(0, Math.min(100, score)));
+    let healthLabel = 'Needs attention';
+    if (score >= 75) healthLabel = 'Strong';
+    else if (score >= 50) healthLabel = 'Steady';
+
+    if (hints.length === 0) {
+      hints.push('Tracking looks healthy — keep a regular snapshot cadence.');
+    }
+
+    return { healthScore: score, healthLabel, healthHints: hints.slice(0, 3) };
+  }
+
+  private buildMonthlyReport() {
+    if (this.rows.length === 0) {
+      this.monthlyReport = [];
+      return;
+    }
+
+    const byMonth = new Map<string, AssetTrackerRow[]>();
+    for (const row of this.rows) {
+      const key = row.date.slice(0, 7);
+      const list = byMonth.get(key) ?? [];
+      list.push(row);
+      byMonth.set(key, list);
+    }
+
+    const keys = [...byMonth.keys()].sort();
+    this.monthlyReport = keys.map((monthKey) => {
+      const monthRows = byMonth.get(monthKey)!;
+      const startAmount = monthRows[0].amount;
+      const endAmount = monthRows[monthRows.length - 1].amount;
+      const change = endAmount - startAmount;
+      const changePercent = startAmount !== 0 ? (change / startAmount) * 100 : 0;
+      const periodPercents = monthRows
+        .filter((r) => r.diffPreviousPercent !== 0 || r.daysSincePrevious !== null)
+        .map((r) => r.diffPreviousPercent);
+      const bestPercent = periodPercents.length ? Math.max(...periodPercents) : 0;
+      const worstPercent = periodPercents.length ? Math.min(...periodPercents) : 0;
+      const [year, month] = monthKey.split('-').map(Number);
+      const labelDate = new Date(year, month - 1, 1);
+      const monthLabel = labelDate.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
+
+      return {
+        monthKey,
+        monthLabel,
+        startAmount,
+        endAmount,
+        change,
+        changePercent,
+        snapshotCount: monthRows.length,
+        bestPercent,
+        worstPercent
+      };
+    }).reverse();
   }
 
   private applySort() {
@@ -682,19 +1098,42 @@ export class AssetTrackerComponent implements OnInit {
     const periodRows = chronological
       .filter((_, i) => i > 0)
       .filter((row) => !this.shouldIgnoreChartPercent(row.diffPreviousPercent));
+    const periodPercents = periodRows.map((row) => row.diffPreviousPercent);
+    const rollingWindow = 3;
+    const rollingAvg = periodPercents.map((_, index) => {
+      const start = Math.max(0, index - rollingWindow + 1);
+      const slice = periodPercents.slice(start, index + 1);
+      return slice.reduce((a, b) => a + b, 0) / slice.length;
+    });
+
     this.periodChangeChartData = {
       labels: periodRows.map((row) => row.dateLabel),
-      datasets: [{
-        label: 'Period % Change',
-        data: periodRows.map((row) => row.diffPreviousPercent),
-        backgroundColor: periodRows.map((row) =>
-          row.diffPreviousPercent >= 0 ? 'rgba(16, 185, 129, 0.7)' : 'rgba(239, 68, 68, 0.7)'
-        ),
-        borderColor: periodRows.map((row) =>
-          row.diffPreviousPercent >= 0 ? 'rgba(16, 185, 129, 1)' : 'rgba(239, 68, 68, 1)'
-        ),
-        borderWidth: 1
-      }]
+      datasets: [
+        {
+          type: 'bar',
+          label: 'Period % Change',
+          data: periodPercents,
+          backgroundColor: periodRows.map((row) =>
+            row.diffPreviousPercent >= 0 ? 'rgba(16, 185, 129, 0.7)' : 'rgba(239, 68, 68, 0.7)'
+          ),
+          borderColor: periodRows.map((row) =>
+            row.diffPreviousPercent >= 0 ? 'rgba(16, 185, 129, 1)' : 'rgba(239, 68, 68, 1)'
+          ),
+          borderWidth: 1,
+          order: 2
+        } as any,
+        {
+          type: 'line',
+          label: '3-period avg',
+          data: rollingAvg,
+          borderColor: 'rgba(30, 64, 175, 1)',
+          backgroundColor: 'rgba(30, 64, 175, 0.1)',
+          tension: 0.35,
+          pointRadius: 0,
+          borderWidth: 2,
+          order: 1
+        } as any
+      ]
     };
 
     const growthRows = chronological.filter((row) => !this.shouldIgnoreChartPercent(row.percent));
@@ -709,6 +1148,34 @@ export class AssetTrackerComponent implements OnInit {
         fill: true,
         pointRadius: 3
       }]
+    };
+
+    const firstAmount = chronological[0]?.amount ?? 0;
+    const indexed = chronological.map((row) =>
+      firstAmount > 0 ? (row.amount / firstAmount) * 100 : 100
+    );
+    this.cumulativeChartData = {
+      labels,
+      datasets: [
+        {
+          label: 'Wealth Index (base 100)',
+          data: indexed,
+          borderColor: 'rgba(16, 185, 129, 1)',
+          backgroundColor: 'rgba(16, 185, 129, 0.12)',
+          tension: 0.35,
+          fill: true,
+          pointRadius: 3
+        },
+        {
+          label: 'Baseline',
+          data: labels.map(() => 100),
+          borderColor: 'rgba(148, 163, 184, 0.9)',
+          borderDash: [6, 4],
+          pointRadius: 0,
+          fill: false,
+          tension: 0
+        }
+      ]
     };
   }
 

@@ -10,6 +10,14 @@
       </button>
       <button
         type="button"
+        class="export-btn"
+        (click)="exportCsv()"
+        [disabled]="loading || !displayRows.length"
+        title="Download snapshot history as CSV">
+        Export CSV
+      </button>
+      <button
+        type="button"
         class="advanced-toggle-btn"
         (click)="toggleAdvancedFilters()"
         [class.active]="showAdvancedFilters || hasActiveFilters()">
@@ -17,6 +25,15 @@
         <span *ngIf="hasActiveFilters()" class="filter-active-dot"></span>
       </button>
     </div>
+  </div>
+
+  <div class="range-presets">
+    <span class="preset-label">Quick range</span>
+    <button type="button" class="preset-btn" [class.active]="activeRangePreset === '3m'" (click)="applyRangePreset('3m')" [disabled]="loading">3M</button>
+    <button type="button" class="preset-btn" [class.active]="activeRangePreset === '6m'" (click)="applyRangePreset('6m')" [disabled]="loading">6M</button>
+    <button type="button" class="preset-btn" [class.active]="activeRangePreset === '1y'" (click)="applyRangePreset('1y')" [disabled]="loading">1Y</button>
+    <button type="button" class="preset-btn" [class.active]="activeRangePreset === 'ytd'" (click)="applyRangePreset('ytd')" [disabled]="loading">YTD</button>
+    <button type="button" class="preset-btn" [class.active]="activeRangePreset === 'all'" (click)="applyRangePreset('all')" [disabled]="loading">All</button>
   </div>
 
   <div class="filters-bar" *ngIf="showAdvancedFilters">
@@ -201,14 +218,94 @@
           <span class="positive">{{ stats.positivePeriods }} up</span>
           ·
           <span class="negative">{{ stats.negativePeriods }} down</span>
+          · win {{ stats.winRate | number:'1.0-0' }}%
         </span>
         <span class="stat-meta">Avg change: {{ getIndianBreakdown(stats.avgPeriodChange).primaryDisplay }}</span>
-        <span class="stat-meta" *ngIf="stats.bestPeriodPercent > 0">
-          Best +{{ stats.bestPeriodPercent | number:'1.2-2' }}% ({{ stats.bestPeriodLabel }})
-        </span>
-        <span class="stat-meta" *ngIf="stats.worstPeriodPercent < 0">
-          Worst {{ stats.worstPeriodPercent | number:'1.2-2' }}% ({{ stats.worstPeriodLabel }})
-        </span>
+        <span class="stat-meta">Vol {{ stats.volatilityPercent | number:'1.1-1' }}% · avg gap {{ stats.avgGapDays | number:'1.0-0' }}d</span>
+      </div>
+    </div>
+
+    <!-- Portfolio Pulse + Goal -->
+    <div class="pulse-goal-grid">
+      <div class="card pulse-card" [ngClass]="healthToneClass()">
+        <div class="pulse-header">
+          <div>
+            <h3>Portfolio Pulse</h3>
+            <p class="chart-hint">Score from win rate, snapshot freshness, drawdown, and cadence</p>
+          </div>
+          <div class="pulse-score">
+            <span class="pulse-number">{{ stats.healthScore }}</span>
+            <span class="pulse-label">{{ stats.healthLabel }}</span>
+          </div>
+        </div>
+        <div class="pulse-meter">
+          <div class="pulse-meter-fill" [style.width.%]="stats.healthScore"></div>
+        </div>
+        <div class="pulse-metrics">
+          <div>
+            <span class="pm-label">Win rate</span>
+            <span class="pm-value">{{ stats.winRate | number:'1.0-0' }}%</span>
+          </div>
+          <div>
+            <span class="pm-label">Freshness</span>
+            <span class="pm-value">{{ stats.daysSinceLastSnapshot }}d</span>
+          </div>
+          <div>
+            <span class="pm-label">Drawdown</span>
+            <span class="pm-value" [class.negative]="isNegative(stats.drawdownFromPeakPercent)">
+              {{ stats.drawdownFromPeakPercent | number:'1.1-1' }}%
+            </span>
+          </div>
+          <div>
+            <span class="pm-label">Max gap</span>
+            <span class="pm-value">{{ stats.maxGapDays }}d</span>
+          </div>
+        </div>
+        <ul class="pulse-hints">
+          <li *ngFor="let hint of stats.healthHints">{{ hint }}</li>
+        </ul>
+      </div>
+
+      <div class="card goal-card">
+        <div class="goal-header">
+          <div>
+            <h3>Milestone Goal</h3>
+            <p class="chart-hint">Track progress toward a target portfolio value</p>
+          </div>
+          <button type="button" class="sort-btn" (click)="toggleGoalEditor()">
+            {{ goalAmount ? 'Edit' : 'Set goal' }}
+          </button>
+        </div>
+
+        <div *ngIf="showGoalEditor" class="goal-editor">
+          <label>
+            Target amount (₹)
+            <input type="number" [(ngModel)]="goalInput" class="price-input" min="1" step="1000" placeholder="e.g. 5000000">
+          </label>
+          <div class="goal-editor-actions">
+            <button type="button" class="apply-btn" (click)="saveGoal()">Save</button>
+            <button type="button" class="clear-btn" (click)="clearGoal()" *ngIf="goalAmount">Clear</button>
+          </div>
+        </div>
+
+        <ng-container *ngIf="goalAmount; else noGoal">
+          <div class="goal-amounts">
+            <span>{{ getIndianBreakdown(currentAmount).primaryDisplay }}</span>
+            <span class="goal-sep">of</span>
+            <span>{{ getIndianBreakdown(goalAmount).primaryDisplay }}</span>
+          </div>
+          <div class="goal-bar">
+            <div class="goal-bar-fill" [style.width.%]="goalProgressPercent"></div>
+          </div>
+          <div class="goal-meta">
+            <span>{{ goalProgressPercent | number:'1.1-1' }}% complete</span>
+            <span *ngIf="goalRemaining > 0">{{ getIndianBreakdown(goalRemaining).primaryDisplay }} remaining</span>
+            <span class="positive" *ngIf="goalRemaining <= 0">Goal reached</span>
+          </div>
+        </ng-container>
+        <ng-template #noGoal>
+          <p class="goal-empty">Set a milestone (e.g. next lakh/crore target) to see progress on every refresh.</p>
+        </ng-template>
       </div>
     </div>
 
@@ -235,9 +332,35 @@
       </div>
 
       <div class="card chart-card">
+        <h3>Wealth Index</h3>
+        <p class="chart-hint">Cumulative growth indexed to 100 at first snapshot</p>
+        <div class="chart-container">
+          <canvas baseChart
+            [data]="cumulativeChartData"
+            [options]="cumulativeChartOptions"
+            [type]="'line'">
+          </canvas>
+        </div>
+      </div>
+
+      <div class="card chart-card">
+        <h3>Allocation Snapshot</h3>
+        <p class="chart-hint">Latest mix by investment type (respects filters)</p>
+        <div class="chart-container" *ngIf="!allocationLoading && !allocationEmpty">
+          <canvas baseChart
+            [data]="allocationChartData"
+            [options]="allocationChartOptions"
+            [type]="'doughnut'">
+          </canvas>
+        </div>
+        <div class="chart-empty" *ngIf="allocationLoading">Loading allocation…</div>
+        <div class="chart-empty" *ngIf="!allocationLoading && allocationEmpty">No allocation data for current filters</div>
+      </div>
+
+      <div class="card chart-card">
         <h3>Period % Change</h3>
         <p class="chart-hint">
-          Return between consecutive snapshots
+          Return between snapshots · 3-period average overlay
           <span *ngIf="filterIgnoreExtremePercent"> · ignoring &gt;400%</span>
           <span *ngIf="filterIgnoreFloorPercent"> · ignoring ≤-100%</span>
         </p>
@@ -267,13 +390,60 @@
       </div>
     </div>
 
+    <!-- Monthly performance report -->
+    <div class="card table-section" *ngIf="monthlyReport.length > 0">
+      <div class="table-header">
+        <div>
+          <h3>Monthly Performance Report</h3>
+          <p class="chart-hint">Month-start vs month-end snapshot values</p>
+        </div>
+      </div>
+      <div class="table-wrapper monthly-wrapper">
+        <table class="tracker-table">
+          <thead>
+            <tr>
+              <th>Month</th>
+              <th class="num">Snapshots</th>
+              <th class="num">Start</th>
+              <th class="num">End</th>
+              <th class="num">Change</th>
+              <th class="num">Change %</th>
+              <th class="num">Best %</th>
+              <th class="num">Worst %</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let m of monthlyReport">
+              <td>{{ m.monthLabel }}</td>
+              <td class="num muted">{{ m.snapshotCount }}</td>
+              <td class="num">{{ getIndianBreakdown(m.startAmount).primaryDisplay }}</td>
+              <td class="num amount-cell">{{ getIndianBreakdown(m.endAmount).primaryDisplay }}</td>
+              <td class="num" [class.positive]="isPositive(m.change)" [class.negative]="isNegative(m.change)">
+                {{ isPositive(m.change) ? '+' : '' }}{{ m.change | number:'1.2-2' }}
+              </td>
+              <td class="num" [class.positive]="isPositive(m.changePercent)" [class.negative]="isNegative(m.changePercent)">
+                {{ isPositive(m.changePercent) ? '+' : '' }}{{ m.changePercent | number:'1.2-2' }}%
+              </td>
+              <td class="num positive">{{ m.bestPercent | number:'1.2-2' }}%</td>
+              <td class="num negative">{{ m.worstPercent | number:'1.2-2' }}%</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
     <!-- Data Table -->
     <div class="card table-section">
       <div class="table-header">
         <h3>Snapshot History</h3>
-        <button type="button" class="sort-btn" (click)="toggleSort()">
-          Sort: {{ sortDirection === 'asc' ? 'Oldest first' : 'Newest first' }}
-        </button>
+        <div class="table-actions">
+          <button type="button" class="sort-btn" (click)="exportCsv()" [disabled]="!displayRows.length">
+            Export CSV
+          </button>
+          <button type="button" class="sort-btn" (click)="toggleSort()">
+            Sort: {{ sortDirection === 'asc' ? 'Oldest first' : 'Newest first' }}
+          </button>
+        </div>
       </div>
 
       <div class="table-wrapper">
