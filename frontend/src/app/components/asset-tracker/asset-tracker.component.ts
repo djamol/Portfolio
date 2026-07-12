@@ -89,6 +89,12 @@ export class AssetTrackerComponent implements OnInit {
   filterMinAmount: number | null = null;
   filterMaxAmount: number | null = null;
   filterIgnoreZero = false;
+  /** When true (default), hide Period % / Growth vs Current points above 400% (impossible outliers). */
+  filterIgnoreExtremePercent = true;
+  /** When true (default), hide Period % / Growth vs Current points at or below -100%. */
+  filterIgnoreFloorPercent = true;
+  private readonly extremePercentLimit = 400;
+  private readonly floorPercentLimit = -100;
 
   investmentTypes: string[] = INVESTMENT_TYPES;
   filterPlatformsOptions: string[] = [];
@@ -275,9 +281,15 @@ export class AssetTrackerComponent implements OnInit {
     this.filterMinAmount = null;
     this.filterMaxAmount = null;
     this.filterIgnoreZero = false;
+    this.filterIgnoreExtremePercent = true;
+    this.filterIgnoreFloorPercent = true;
     this.filterEmptyMessage = '';
     this.applyingFilters = true;
     this.loadData();
+  }
+
+  onIgnoreChartPercentChange() {
+    this.buildCharts();
   }
 
   loadFilterOptions() {
@@ -667,7 +679,9 @@ export class AssetTrackerComponent implements OnInit {
       ]
     };
 
-    const periodRows = chronological.filter((_, i) => i > 0);
+    const periodRows = chronological
+      .filter((_, i) => i > 0)
+      .filter((row) => !this.shouldIgnoreChartPercent(row.diffPreviousPercent));
     this.periodChangeChartData = {
       labels: periodRows.map((row) => row.dateLabel),
       datasets: [{
@@ -683,11 +697,12 @@ export class AssetTrackerComponent implements OnInit {
       }]
     };
 
+    const growthRows = chronological.filter((row) => !this.shouldIgnoreChartPercent(row.percent));
     this.growthChartData = {
-      labels,
+      labels: growthRows.map((row) => row.dateLabel),
       datasets: [{
         label: 'Growth vs Current (%)',
-        data: chronological.map((row) => row.percent),
+        data: growthRows.map((row) => row.percent),
         borderColor: 'rgba(118, 75, 162, 1)',
         backgroundColor: 'rgba(118, 75, 162, 0.12)',
         tension: 0.35,
@@ -695,6 +710,12 @@ export class AssetTrackerComponent implements OnInit {
         pointRadius: 3
       }]
     };
+  }
+
+  private shouldIgnoreChartPercent(value: number): boolean {
+    if (this.filterIgnoreExtremePercent && value > this.extremePercentLimit) return true;
+    if (this.filterIgnoreFloorPercent && value <= this.floorPercentLimit) return true;
+    return false;
   }
 
   private toNumber(value: unknown): number {

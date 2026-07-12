@@ -90,6 +90,26 @@
             Ignore 0 value entries
           </label>
         </div>
+
+        <div class="advanced-filter-group checkbox-group">
+          <label class="checkbox-label" title="Hides Period % Change and Growth vs Current points above 400% (not realistic)">
+            <input
+              type="checkbox"
+              [(ngModel)]="filterIgnoreExtremePercent"
+              (ngModelChange)="onIgnoreChartPercentChange()">
+            Ignore &gt;400% (charts)
+          </label>
+        </div>
+
+        <div class="advanced-filter-group checkbox-group">
+          <label class="checkbox-label" title="Hides Period % Change and Growth vs Current points at or below -100%">
+            <input
+              type="checkbox"
+              [(ngModel)]="filterIgnoreFloorPercent"
+              (ngModelChange)="onIgnoreChartPercentChange()">
+            Ignore ≤-100% (charts)
+          </label>
+        </div>
       </div>
     </div>
   </div>
@@ -216,7 +236,11 @@
 
       <div class="card chart-card">
         <h3>Period % Change</h3>
-        <p class="chart-hint">Return between consecutive snapshots</p>
+        <p class="chart-hint">
+          Return between consecutive snapshots
+          <span *ngIf="filterIgnoreExtremePercent"> · ignoring &gt;400%</span>
+          <span *ngIf="filterIgnoreFloorPercent"> · ignoring ≤-100%</span>
+        </p>
         <div class="chart-container">
           <canvas baseChart
             [data]="periodChangeChartData"
@@ -228,7 +252,11 @@
 
       <div class="card chart-card">
         <h3>Growth vs Current</h3>
-        <p class="chart-hint">How far each snapshot is below/above today's total</p>
+        <p class="chart-hint">
+          How far each snapshot is below/above today's total
+          <span *ngIf="filterIgnoreExtremePercent"> · ignoring &gt;400%</span>
+          <span *ngIf="filterIgnoreFloorPercent"> · ignoring ≤-100%</span>
+        </p>
         <div class="chart-container">
           <canvas baseChart
             [data]="growthChartData"
