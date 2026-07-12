@@ -6,6 +6,7 @@ import { ConfigService } from '../../services/config.service';
 import { INVESTMENT_TYPES } from '../../constants/investment-types.constants';
 import { hasMultiSelectFilter, matchesMultiSelect, pruneSelections } from '../../utils/advanced-filter.util';
 import { matchesPlatformFilter } from '../../utils/ignore-platform.util';
+import { ChartConfiguration, ChartOptions } from 'chart.js';
 
 @Component({
   selector: 'app-investment-summary',
@@ -51,6 +52,65 @@ export class InvestmentSummaryComponent implements OnInit {
   platforms: string[] = [];
   subTypes: string[] = [];
   categories: string[] = [];
+
+  typeChartData: ChartConfiguration<'bar'>['data'] = { labels: [], datasets: [] };
+  platformChartData: ChartConfiguration<'doughnut'>['data'] = {
+    labels: [],
+    datasets: [{
+      data: [],
+      backgroundColor: [
+        'rgba(59, 130, 246, 0.85)',
+        'rgba(16, 185, 129, 0.85)',
+        'rgba(245, 158, 11, 0.85)',
+        'rgba(239, 68, 68, 0.85)',
+        'rgba(118, 75, 162, 0.85)',
+        'rgba(14, 165, 233, 0.85)',
+        'rgba(236, 72, 153, 0.85)',
+        'rgba(34, 197, 94, 0.85)',
+        'rgba(99, 102, 241, 0.85)',
+        'rgba(244, 63, 94, 0.85)'
+      ]
+    }]
+  };
+  taxReportRows: Array<{ label: string; amount: number; count: number; percent: number }> = [];
+  taxReportTotal = 0;
+
+  barChartOptions: ChartOptions<'bar'> = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          label: (ctx) =>
+            `₹${(ctx.parsed.y ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+        }
+      }
+    },
+    scales: {
+      y: {
+        ticks: { callback: (v) => '₹' + Number(v).toLocaleString('en-IN') }
+      }
+    }
+  };
+
+  doughnutOptions: ChartOptions<'doughnut'> = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { position: 'right' },
+      tooltip: {
+        callbacks: {
+          label: (ctx) => {
+            const value = Number(ctx.parsed) || 0;
+            const total = (ctx.dataset.data as number[]).reduce((a, b) => a + (Number(b) || 0), 0);
+            const pct = total > 0 ? (value / total) * 100 : 0;
+            return `${ctx.label}: ₹${value.toLocaleString('en-IN')} (${pct.toFixed(1)}%)`;
+          }
+        }
+      }
+    }
+  };
 
   constructor(
     private analyticsService: AnalyticsService,
@@ -227,6 +287,108 @@ export class InvestmentSummaryComponent implements OnInit {
     );
     this.calculatePagination();
     this.updatePaginatedData();
+    this.buildReportCharts();
+    this.buildTaxReport();
+  }
+
+  exportCsv() {
+    if (!this.filteredData.length) return;
+    const headers = [
+      'Platform',
+      'Type',
+      'Sub Type',
+      'Category',
+      'Amount',
+      'Percent of Filtered',
+      'Investment Date'
+    ];
+    const lines = this.filteredData.map((item) => [
+      this.csvEscape(item.website_app_name || ''),
+      this.csvEscape(item.investment_type || ''),
+      this.csvEscape(item.sub_type_name || ''),
+      this.csvEscape(item.sub_type_category || ''),
+      Number(item.amount || 0).toFixed(2),
+      this.getAmountPercentage(item.amount).toFixed(2),
+      item.investment_date instanceof Date
+        ? item.investment_date.toISOString().slice(0, 10)
+        : String(item.investment_date || '')
+    ].join(','));
+    const csv = [headers.join(','), ...lines].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `investment-summary-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  private csvEscape(value: string): string {
+    if (value.includes(',') || value.includes('"') || value.includes('\n')) {
+      return `"${value.replace(/"/g, '""')}"`;
+    }
+    return value;
+  }
+
+  private buildReportCharts() {
+    const byType = new Map<string, number>();
+    const byPlatform = new Map<string, number>();
+    for (const item of this.filteredData) {
+      const type = item.investment_type || 'Other';
+      const platform = item.website_app_name || 'Other';
+      const amount = Number(item.amount) || 0;
+      byType.set(type, (byType.get(type) ?? 0) + amount);
+      byPlatform.set(platform, (byPlatform.get(platform) ?? 0) + amount);
+    }
+
+    const typeSorted = [...byType.entries()].sort((a, b) => b[1] - a[1]);
+    this.typeChartData = {
+      labels: typeSorted.map(([k]) => k),
+      datasets: [{
+        label: 'Amount (₹)',
+        data: typeSorted.map(([, v]) => v),
+        backgroundColor: 'rgba(59, 130, 246, 0.7)',
+        borderColor: 'rgba(59, 130, 246, 1)',
+        borderWidth: 1
+      }]
+    };
+
+    const platformSorted = [...byPlatform.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10);
+    this.platformChartData = {
+      labels: platformSorted.map(([k]) => k),
+      datasets: [{
+        ...this.platformChartData.datasets[0],
+        data: platformSorted.map(([, v]) => v)
+      }]
+    };
+  }
+
+  private buildTaxReport() {
+    const taxLike = this.filteredData.filter((item) => {
+      const blob = [
+        item.investment_type,
+        item.sub_type_name || '',
+        item.sub_type_category || ''
+      ].join(' ').toLowerCase();
+      return blob.includes('tax') || blob.includes('elss') || blob.includes('ppf') || item.investment_type === 'PPF';
+    });
+    this.taxReportTotal = taxLike.reduce((s, i) => s + (Number(i.amount) || 0), 0);
+    const map = new Map<string, { amount: number; count: number }>();
+    for (const item of taxLike) {
+      const label = item.sub_type_name || item.investment_type;
+      const cur = map.get(label) || { amount: 0, count: 0 };
+      cur.amount += Number(item.amount) || 0;
+      cur.count += 1;
+      map.set(label, cur);
+    }
+    this.taxReportRows = [...map.entries()]
+      .map(([label, v]) => ({
+        label,
+        amount: v.amount,
+        count: v.count,
+        percent: this.taxReportTotal > 0 ? (v.amount / this.taxReportTotal) * 100 : 0
+      }))
+      .sort((a, b) => b.amount - a.amount);
   }
 
   calculatePagination() {

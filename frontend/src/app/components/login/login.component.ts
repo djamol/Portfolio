@@ -33,7 +33,7 @@ export class LoginComponent implements OnInit {
       if (storedApiDomain) {
         this.apiDomain = storedApiDomain;
       }
-      this.router.navigate(['/investments']);
+      this.router.navigate(['/dashboard']);
     }
   }
   
@@ -50,8 +50,8 @@ export class LoginComponent implements OnInit {
           // Store login state and API domain using auth service
           this.authService.login(this.apiDomain);
           
-          // Navigate to main application
-          this.router.navigate(['/investments']);
+          // Navigate to dashboard home
+          this.router.navigate(['/dashboard']);
         })
         .catch(() => {
           this.errorMessage = `Cannot connect to ${this.apiDomain}. Use full URL with protocol and port, e.g. http://your-domain.com:3000`;

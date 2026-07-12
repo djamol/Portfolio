@@ -1,5 +1,10 @@
 <div class="investment-summary-container">
-  <h2>Investment Summary</h2>
+  <div class="summary-header">
+    <h2>Investment Summary</h2>
+    <button type="button" class="export-btn" (click)="exportCsv()" [disabled]="!filteredData.length">
+      Export CSV
+    </button>
+  </div>
   
   <div *ngIf="errorMessage" class="error-message">
     <strong>Error:</strong> {{ errorMessage }}<br>
@@ -125,6 +130,63 @@
   <!-- Loading indicator -->
   <div *ngIf="loading" class="loading">
     Loading investment summary...
+  </div>
+
+  <!-- Filtered report charts -->
+  <div class="report-section" *ngIf="!loading && filteredData.length > 0">
+    <div class="report-grid">
+      <div class="report-card">
+        <h3>Breakdown by Type</h3>
+        <p class="report-hint">Respects current search &amp; filters</p>
+        <div class="report-chart" *ngIf="typeChartData.labels?.length">
+          <canvas baseChart
+            [data]="typeChartData"
+            [options]="barChartOptions"
+            [type]="'bar'">
+          </canvas>
+        </div>
+      </div>
+      <div class="report-card">
+        <h3>Top Platforms</h3>
+        <p class="report-hint">Top 10 platforms in filtered view</p>
+        <div class="report-chart" *ngIf="platformChartData.labels?.length">
+          <canvas baseChart
+            [data]="platformChartData"
+            [options]="doughnutOptions"
+            [type]="'doughnut'">
+          </canvas>
+        </div>
+      </div>
+    </div>
+
+    <div class="report-card tax-card" *ngIf="taxReportRows.length">
+      <div class="tax-head">
+        <div>
+          <h3>Tax-oriented holdings (filtered)</h3>
+          <p class="report-hint">ELSS / Tax Saving / PPF — informational only, not tax advice</p>
+        </div>
+        <div class="tax-total">
+          ₹{{ taxReportTotal | number:'1.2-2' }}
+          <span *ngIf="filteredTotalAmount">
+            ({{ (taxReportTotal / filteredTotalAmount * 100) | number:'1.1-1' }}% of filtered)
+          </span>
+        </div>
+      </div>
+      <div class="tax-table">
+        <div class="tax-row tax-head-row">
+          <div>Label</div>
+          <div class="num">Count</div>
+          <div class="num">Amount</div>
+          <div class="num">Share</div>
+        </div>
+        <div class="tax-row" *ngFor="let row of taxReportRows">
+          <div>{{ row.label }}</div>
+          <div class="num">{{ row.count }}</div>
+          <div class="num">₹{{ row.amount | number:'1.2-2' }}</div>
+          <div class="num">{{ row.percent | number:'1.1-1' }}%</div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- Results Info and Pagination -->

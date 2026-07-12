@@ -1,0 +1,216 @@
+<div class="dashboard">
+  <div class="dash-header">
+    <div>
+      <h2>Dashboard</h2>
+      <p class="subtitle">Portfolio overview — net worth, allocation, movers, tax &amp; maturity watch</p>
+    </div>
+    <button type="button" class="refresh-btn" (click)="refresh()" [disabled]="loading">
+      {{ loading ? 'Loading…' : 'Refresh' }}
+    </button>
+  </div>
+
+  <div *ngIf="errorMessage" class="error-banner">{{ errorMessage }}</div>
+
+  <div class="freshness-banner" [ngClass]="freshnessTone()" *ngIf="daysSinceSnapshot !== null">
+    <strong>Data freshness:</strong>
+    Last snapshot {{ daysSinceSnapshot }} day(s) ago
+    <span *ngIf="daysSinceSnapshot > 14"> — add a fresh history entry for better tracking.</span>
+    <span *ngIf="daysSinceSnapshot <= 7"> — looking current.</span>
+  </div>
+
+  <div class="kpi-grid">
+    <div class="kpi highlight">
+      <span class="kpi-label">Net Worth</span>
+      <span class="kpi-value" *ngIf="totalBreakdown">{{ totalBreakdown.primaryDisplay }}</span>
+      <span class="kpi-meta" *ngIf="totalBreakdown">{{ totalBreakdown.full }}</span>
+    </div>
+    <div class="kpi">
+      <span class="kpi-label">Holdings</span>
+      <span class="kpi-value">{{ totalInvestments }}</span>
+      <span class="kpi-meta">Active investments</span>
+    </div>
+    <div class="kpi" *ngIf="insights?.portfolio">
+      <span class="kpi-label">Vs Previous Snapshot</span>
+      <span class="kpi-value"
+        [class.pos]="toNumber(insights?.portfolio?.changeAbs) > 0"
+        [class.neg]="toNumber(insights?.portfolio?.changeAbs) < 0">
+        ₹{{ toNumber(insights?.portfolio?.changeAbs) | number:'1.2-2' }}
+      </span>
+      <span class="kpi-meta" *ngIf="insights?.portfolio?.changePct !== null">
+        {{ toNumber(insights?.portfolio?.changePct) | number:'1.2-2' }}%
+      </span>
+    </div>
+    <div class="kpi">
+      <span class="kpi-label">Tax-oriented</span>
+      <span class="kpi-value">₹{{ taxTotal | number:'1.0-0' }}</span>
+      <span class="kpi-meta">{{ taxPercentOfPortfolio | number:'1.1-1' }}% of portfolio</span>
+    </div>
+  </div>
+
+  <div class="charts-row">
+    <div class="panel">
+      <div class="panel-head">
+        <h3>Allocation</h3>
+        <a routerLink="/analytics" class="link-btn">Full analytics</a>
+      </div>
+      <div class="chart-box" *ngIf="allocationChartData.labels?.length; else noAlloc">
+        <canvas baseChart
+          [data]="allocationChartData"
+          [options]="doughnutOptions"
+          [type]="'doughnut'">
+        </canvas>
+      </div>
+      <ng-template #noAlloc><div class="empty">No allocation data</div></ng-template>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <h3>Value trend (12M)</h3>
+        <a routerLink="/asset-tracker" class="link-btn">Asset tracker</a>
+      </div>
+      <div class="chart-box" *ngIf="sparklineChartData.labels?.length; else noSpark">
+        <canvas baseChart
+          [data]="sparklineChartData"
+          [options]="sparklineOptions"
+          [type]="'line'">
+        </canvas>
+      </div>
+      <ng-template #noSpark><div class="empty">No snapshot trend yet</div></ng-template>
+    </div>
+  </div>
+
+  <div class="three-col">
+    <div class="panel">
+      <div class="panel-head">
+        <h3>Top holdings</h3>
+        <button type="button" class="mini" (click)="pinTopHoldings()" [disabled]="!insights?.topHoldings?.length">
+          Pin to watchlist
+        </button>
+      </div>
+      <div class="list" *ngIf="insights?.topHoldings?.length; else noHoldings">
+        <div class="list-row" *ngFor="let h of insights?.topHoldings">
+          <div>
+            <div class="title">{{ h.sub_type_name || h.website_app_name }}</div>
+            <div class="meta">{{ h.investment_type }} · {{ h.website_app_name }}</div>
+          </div>
+          <div class="right">
+            <div class="strong">{{ toNumber(h.pct_of_portfolio) | number:'1.1-1' }}%</div>
+            <div class="meta">₹{{ toNumber(h.amount) | number:'1.0-0' }}</div>
+            <button type="button" class="pin" (click)="toggleWatchlist(h.investment_id)">
+              {{ isWatched(h.investment_id) ? 'Unpin' : 'Pin' }}
+            </button>
+          </div>
+        </div>
+      </div>
+      <ng-template #noHoldings><div class="empty">No holdings insight</div></ng-template>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <h3>Recent movers</h3>
+        <span class="meta" *ngIf="deltaFrom && deltaTo">{{ deltaFrom }} → {{ deltaTo }}</span>
+      </div>
+      <div class="movers" *ngIf="topGainers.length || topLosers.length; else noMovers">
+        <div>
+          <h4 class="pos-title">Gainers</h4>
+          <div class="list-row" *ngFor="let r of topGainers">
+            <div class="title">{{ r.sub_type_name || r.website_app_name }}</div>
+            <div class="right pos">₹{{ toNumber(r.delta) | number:'1.0-0' }}</div>
+          </div>
+        </div>
+        <div>
+          <h4 class="neg-title">Losers</h4>
+          <div class="list-row" *ngFor="let r of topLosers">
+            <div class="title">{{ r.sub_type_name || r.website_app_name }}</div>
+            <div class="right neg">₹{{ toNumber(r.delta) | number:'1.0-0' }}</div>
+          </div>
+        </div>
+      </div>
+      <ng-template #noMovers><div class="empty">No mover data for recent snapshots</div></ng-template>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <h3>Watchlist</h3>
+        <button type="button" class="mini" (click)="clearWatchlist()" [disabled]="!watchlistRows.length">Clear</button>
+      </div>
+      <div class="list" *ngIf="watchlistRows.length; else noWatch">
+        <div class="list-row" *ngFor="let w of watchlistRows">
+          <div>
+            <div class="title">{{ w.website_app_name }}</div>
+            <div class="meta">{{ w.investment_type }} · {{ w.sub_type_name || '—' }}</div>
+          </div>
+          <div class="right">
+            <div class="strong">₹{{ w.amount | number:'1.0-0' }}</div>
+            <button type="button" class="pin" (click)="toggleWatchlist(w.id)">Unpin</button>
+          </div>
+        </div>
+      </div>
+      <ng-template #noWatch><div class="empty">Pin holdings from Top holdings to track them here</div></ng-template>
+    </div>
+  </div>
+
+  <div class="two-col">
+    <div class="panel">
+      <div class="panel-head">
+        <h3>Tax-oriented holdings</h3>
+        <a routerLink="/investment-summary" class="link-btn">Summary report</a>
+      </div>
+      <p class="hint">ELSS, Tax Saving FD/Bond, PPF and Tax Saving categories (informational only).</p>
+      <div class="list" *ngIf="taxBuckets.length; else noTax">
+        <div class="list-row" *ngFor="let t of taxBuckets">
+          <div>
+            <div class="title">{{ t.label }}</div>
+            <div class="meta">{{ t.count }} holding(s)</div>
+          </div>
+          <div class="right">
+            <div class="strong">₹{{ t.amount | number:'1.0-0' }}</div>
+            <div class="meta">{{ t.percent | number:'1.1-1' }}% of tax bucket</div>
+          </div>
+        </div>
+      </div>
+      <ng-template #noTax><div class="empty">No tax-oriented holdings detected</div></ng-template>
+    </div>
+
+    <div class="panel">
+      <div class="panel-head">
+        <h3>Maturity watch</h3>
+      </div>
+      <p class="hint">
+        Uses <code>maturity:YYYY-MM-DD</code> in notes, or estimates from FD/Bond/PPF tenor.
+      </p>
+      <div class="list" *ngIf="maturityItems.length; else noMaturity">
+        <div class="list-row" *ngFor="let m of maturityItems">
+          <div>
+            <div class="title">{{ m.name }}</div>
+            <div class="meta">
+              {{ m.maturityDate | date:'dd MMM yyyy' }}
+              · {{ m.source === 'notes' ? 'from notes' : 'estimate' }}
+            </div>
+          </div>
+          <div class="right">
+            <div class="strong" [class.neg]="m.daysLeft <= 30" [class.warn-text]="m.daysLeft > 30 && m.daysLeft <= 90">
+              {{ m.daysLeft }}d
+            </div>
+            <div class="meta">₹{{ m.amount | number:'1.0-0' }}</div>
+          </div>
+        </div>
+      </div>
+      <ng-template #noMaturity>
+        <div class="empty">No near-term maturities. Tip: add <code>maturity:2026-12-31</code> in FD/Bond notes.</div>
+      </ng-template>
+    </div>
+  </div>
+
+  <div class="quick-links panel">
+    <h3>Quick links</h3>
+    <div class="links">
+      <a routerLink="/investments">Manage investments</a>
+      <a routerLink="/investment-summary">Holdings report</a>
+      <a routerLink="/analytics">Analytics &amp; projection</a>
+      <a routerLink="/asset-tracker">Asset tracker &amp; goals</a>
+      <a routerLink="/import-data">Import MF / ETF</a>
+      <a routerLink="/import-export">Backup / restore</a>
+    </div>
+  </div>
+</div>
