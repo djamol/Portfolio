@@ -7,6 +7,9 @@ import { BaseChartDirective } from 'ng2-charts';
 import { INVESTMENT_TYPES } from '../../constants/investment-types.constants';
 import { hasMultiSelectFilter, pruneSelections } from '../../utils/advanced-filter.util';
 
+type RangePreset = '3m' | '6m' | '1y' | 'ytd' | 'all';
+type ProjectionHorizon = 3 | 6 | 12;
+
 @Component({
   selector: 'app-analytics',
   templateUrl: './analytics.component.html',
@@ -356,12 +359,236 @@ export class AnalyticsComponent implements OnInit {
 
   targetAllocationPct: Record<string, number> = {};
   rebalanceRows: Array<{ investment_type: string; currentValue: number; currentPct: number; targetPct: number; targetValue: number; suggestion: number }> = [];
+  targetPctSum = 0;
+  targetPctValid = true;
+
+  activeRangePreset: RangePreset | null = null;
+  showWealthIndex = false;
+  showProjection = true;
+  projectionMonths: ProjectionHorizon = 12;
+  projectionCagr: number | null = null;
+  projectionEndValue: number | null = null;
+  projectionMessage = '';
+  private lastValueSeriesPayload: ValueSeriesResponse | null = null;
+  lastSnapshotDates: string[] = [];
+
+  cashflowChartData: ChartConfiguration<'bar'>['data'] = { labels: [], datasets: [] };
+  cashflowChartOptions: ChartOptions<'bar'> = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: true, position: 'top' },
+      tooltip: {
+        callbacks: {
+          label: (context) => {
+            const value = context.parsed.y ?? 0;
+            return `${context.dataset.label}: ₹${value.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+          }
+        }
+      }
+    },
+    scales: {
+      y: {
+        ticks: {
+          callback: (value) => '₹' + Number(value).toLocaleString('en-IN')
+        }
+      }
+    }
+  };
+
+  rebalanceDriftChartData: ChartConfiguration<'bar'>['data'] = { labels: [], datasets: [] };
+  rebalanceDriftChartOptions: ChartOptions<'bar'> = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: true, position: 'top' },
+      tooltip: {
+        callbacks: {
+          label: (context) => `${context.dataset.label}: ${(context.parsed.y ?? 0).toFixed(1)}%`
+        }
+      }
+    },
+    scales: {
+      y: {
+        beginAtZero: true,
+        title: { display: true, text: '% of portfolio' },
+        ticks: { callback: (value) => `${value}%` }
+      }
+    }
+  };
+
+  valueSeriesViewOptions: ChartOptions<'line'> = {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: { display: true, position: 'top' },
+      tooltip: {
+        callbacks: {
+          label: (context) => {
+            const value = context.parsed.y;
+            if (value === null || value === undefined) return `${context.dataset.label}: —`;
+            if (context.dataset.yAxisID === 'y1' || (context.dataset.label || '').includes('Index')) {
+              return `${context.dataset.label}: ${value.toFixed(2)}`;
+            }
+            return `${context.dataset.label}: ₹${value.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+          }
+        }
+      }
+    },
+    scales: {
+      y: {
+        position: 'left',
+        ticks: {
+          callback: (value) => '₹' + Number(value).toLocaleString('en-IN')
+        }
+      },
+      y1: {
+        position: 'right',
+        display: false,
+        grid: { drawOnChartArea: false },
+        ticks: {
+          callback: (value) => Number(value).toFixed(0)
+        }
+      }
+    }
+  };
 
   constructor(private analyticsService: AnalyticsService) {}
 
   ngOnInit() {
     this.loadFilterOptions();
     this.loadAnalytics();
+  }
+
+  applyRangePreset(preset: RangePreset) {
+    this.activeRangePreset = preset;
+    const today = new Date();
+    const toKey = this.toDateKey(today);
+
+    if (preset === 'all') {
+      this.filterFrom = '';
+      this.filterTo = '';
+    } else if (preset === 'ytd') {
+      this.filterFrom = `${today.getFullYear()}-01-01`;
+      this.filterTo = toKey;
+    } else {
+      const months = preset === '3m' ? 3 : preset === '6m' ? 6 : 12;
+      const from = new Date(today.getFullYear(), today.getMonth() - months, today.getDate());
+      this.filterFrom = this.toDateKey(from);
+      this.filterTo = toKey;
+    }
+
+    this.applyFilters(true);
+  }
+
+  onValueSeriesViewChange() {
+    if (this.lastValueSeriesPayload) {
+      this.buildValueSeriesChart(this.lastValueSeriesPayload);
+    }
+  }
+
+  applyDeltaPreset(kind: 'last2' | 'firstLast') {
+    if (this.lastSnapshotDates.length < 2) return;
+    if (kind === 'last2') {
+      this.deltaFrom = this.lastSnapshotDates[this.lastSnapshotDates.length - 2];
+      this.deltaTo = this.lastSnapshotDates[this.lastSnapshotDates.length - 1];
+    } else {
+      this.deltaFrom = this.lastSnapshotDates[0];
+      this.deltaTo = this.lastSnapshotDates[this.lastSnapshotDates.length - 1];
+    }
+    this.loadDelta();
+  }
+
+  topHoldingPct(): number | null {
+    const top = this.insights?.topHoldings?.[0];
+    if (!top) return null;
+    return this.toNumber(top.pct_of_portfolio);
+  }
+
+  concentrationLabel(): string {
+    const pct = this.topHoldingPct();
+    if (pct === null) return '—';
+    if (pct >= 40) return 'High concentration';
+    if (pct >= 25) return 'Elevated';
+    return 'Diversified';
+  }
+
+  exportAllocationCsv() {
+    const labels = (this.allocationLatestChartData.labels || []) as string[];
+    const values = (this.allocationLatestChartData.datasets?.[0]?.data || []) as number[];
+    if (!labels.length) return;
+    const total = values.reduce((a, b) => a + (Number(b) || 0), 0) || 1;
+    const lines = [
+      'Type,Value,Percent',
+      ...labels.map((label, i) => {
+        const value = Number(values[i]) || 0;
+        return `${this.csvEscape(label)},${value.toFixed(2)},${((value / total) * 100).toFixed(2)}`;
+      })
+    ];
+    this.downloadCsv(lines.join('\n'), 'analytics-allocation');
+  }
+
+  exportRebalanceCsv() {
+    if (!this.rebalanceRows.length) return;
+    const lines = [
+      'Type,Current Value,Current %,Target %,Target Value,Suggestion',
+      ...this.rebalanceRows.map((r) =>
+        [
+          this.csvEscape(r.investment_type),
+          r.currentValue.toFixed(2),
+          r.currentPct.toFixed(2),
+          r.targetPct.toFixed(2),
+          r.targetValue.toFixed(2),
+          r.suggestion.toFixed(2)
+        ].join(',')
+      )
+    ];
+    this.downloadCsv(lines.join('\n'), 'analytics-rebalance');
+  }
+
+  exportDeltaCsv() {
+    if (!this.deltaRows.length) return;
+    const lines = [
+      'Holding,Platform,Type,Sub Type,Category,Amount From,Amount To,Delta',
+      ...this.deltaRows.map((r) =>
+        [
+          this.csvEscape(r.sub_type_name || r.website_app_name || ''),
+          this.csvEscape(r.website_app_name || ''),
+          this.csvEscape(r.investment_type || ''),
+          this.csvEscape(r.sub_type_name || ''),
+          this.csvEscape(r.sub_type_category || ''),
+          this.toNumber(r.amount_from).toFixed(2),
+          this.toNumber(r.amount_to).toFixed(2),
+          this.toNumber(r.delta).toFixed(2)
+        ].join(',')
+      )
+    ];
+    this.downloadCsv(lines.join('\n'), `analytics-delta-${this.deltaFrom}-to-${this.deltaTo}`);
+  }
+
+  private toDateKey(date: Date): string {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  private csvEscape(value: string): string {
+    if (value.includes(',') || value.includes('"') || value.includes('\n')) {
+      return `"${value.replace(/"/g, '""')}"`;
+    }
+    return value;
+  }
+
+  private downloadCsv(content: string, baseName: string) {
+    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${baseName}.csv`;
+    anchor.click();
+    URL.revokeObjectURL(url);
   }
 
   loadFilterOptions() {
@@ -452,7 +679,19 @@ export class AnalyticsComponent implements OnInit {
     this.filterMinAmount = null;
     this.filterMaxAmount = null;
     this.filterIgnoreZero = false;
-    this.applyFilters();
+    this.activeRangePreset = 'all';
+    this.applyFilters(true);
+  }
+
+  applyFilters(fromPreset = false) {
+    if (!fromPreset) {
+      this.activeRangePreset = null;
+    }
+    this.applyingFilters = true;
+    this.loadAnalytics();
+    setTimeout(() => {
+      this.applyingFilters = false;
+    }, 300);
   }
 
   loadAnalytics() {
@@ -460,13 +699,12 @@ export class AnalyticsComponent implements OnInit {
     this.errorMessage = '';
     this.advanceErrorMessage = '';
     let completedRequests = 0;
-    const totalRequests = 10;
+    const totalRequests = 12;
 
     const checkComplete = () => {
       completedRequests++;
       if (completedRequests >= totalRequests) {
         this.loading = false;
-        // Initialize the dynamic charts with default selections after all data is loaded
         setTimeout(() => {
           this.initializeDynamicCharts();
         }, 100);
@@ -535,8 +773,8 @@ export class AnalyticsComponent implements OnInit {
     this.analyticsService.getByMonth().subscribe({
       next: (response) => {
         if (response.data && response.data.length > 0) {
-          // Sort by amount in descending order
-          const sortedData = [...response.data].sort((a, b) => parseFloat(b.total_amount) - parseFloat(a.total_amount));
+          // Chronological order for trend charts
+          const sortedData = [...response.data].sort((a, b) => String(a.month).localeCompare(String(b.month)));
           
           this.byMonthChartData = {
             labels: sortedData.map((item: any) => item.month),
@@ -564,8 +802,7 @@ export class AnalyticsComponent implements OnInit {
     this.analyticsService.getByYear().subscribe({
       next: (response) => {
         if (response.data && response.data.length > 0) {
-          // Sort by amount in descending order
-          const sortedData = [...response.data].sort((a, b) => parseFloat(b.total_amount) - parseFloat(a.total_amount));
+          const sortedData = [...response.data].sort((a, b) => Number(a.year) - Number(b.year));
           
           this.byYearChartData = {
             labels: sortedData.map((item: any) => item.year.toString()),
@@ -763,11 +1000,13 @@ export class AnalyticsComponent implements OnInit {
       next: (response) => {
         const payload = response.data;
         if (payload?.rows?.length) {
+          this.lastValueSeriesPayload = payload;
           this.buildValueSeriesChart(payload);
 
           const dates = [...new Set(payload.rows.map((p) => p.change_date))].sort(
             (a, b) => new Date(a).getTime() - new Date(b).getTime()
           );
+          this.lastSnapshotDates = dates;
           if (!this.deltaFrom || !this.deltaTo) {
             if (dates.length >= 2) {
               this.deltaFrom = dates[dates.length - 2];
@@ -777,7 +1016,15 @@ export class AnalyticsComponent implements OnInit {
               this.deltaTo = dates[0];
             }
           }
+          if (this.deltaFrom && this.deltaTo) {
+            this.loadDelta();
+          }
         } else {
+          this.lastValueSeriesPayload = null;
+          this.lastSnapshotDates = [];
+          this.projectionCagr = null;
+          this.projectionEndValue = null;
+          this.projectionMessage = 'Need at least 2 snapshots to project future value.';
           this.valueSeriesChartData = { labels: [], datasets: [] };
         }
         checkComplete();
@@ -785,6 +1032,50 @@ export class AnalyticsComponent implements OnInit {
       error: (error) => {
         console.error('Error loading value series:', error);
         this.advanceErrorMessage = 'Advance analytics: failed to load portfolio value series.';
+        checkComplete();
+      }
+    });
+
+    // Cashflows by month (inflow / outflow / net)
+    this.analyticsService.getCashflowsByMonth().subscribe({
+      next: (response) => {
+        const rows = response.data || [];
+        if (rows.length) {
+          const sorted = [...rows].sort((a, b) => String(a.month).localeCompare(String(b.month)));
+          this.cashflowChartData = {
+            labels: sorted.map((r) => r.month),
+            datasets: [
+              {
+                label: 'Inflow',
+                data: sorted.map((r) => this.toNumber(r.inflow)),
+                backgroundColor: 'rgba(16, 185, 129, 0.75)',
+                borderColor: 'rgba(16, 185, 129, 1)',
+                borderWidth: 1
+              },
+              {
+                label: 'Outflow',
+                data: sorted.map((r) => this.toNumber(r.outflow)),
+                backgroundColor: 'rgba(239, 68, 68, 0.75)',
+                borderColor: 'rgba(239, 68, 68, 1)',
+                borderWidth: 1
+              },
+              {
+                label: 'Net',
+                data: sorted.map((r) => this.toNumber(r.net_cashflow)),
+                backgroundColor: 'rgba(59, 130, 246, 0.75)',
+                borderColor: 'rgba(59, 130, 246, 1)',
+                borderWidth: 1
+              }
+            ]
+          };
+        } else {
+          this.cashflowChartData = { labels: [], datasets: [] };
+        }
+        checkComplete();
+      },
+      error: (error) => {
+        console.error('Error loading cashflows:', error);
+        this.cashflowChartData = { labels: [], datasets: [] };
         checkComplete();
       }
     });
@@ -1137,6 +1428,10 @@ export class AnalyticsComponent implements OnInit {
     );
     const labels = allDates.map((date) => this.formatSnapshotLabel(date));
 
+    this.projectionCagr = null;
+    this.projectionEndValue = null;
+    this.projectionMessage = '';
+
     if (payload.mode === 'series') {
       const seriesNames = [...new Set(rows.map((row) => row.series_name).filter(Boolean))] as string[];
       this.valueSeriesChartData = {
@@ -1157,36 +1452,121 @@ export class AnalyticsComponent implements OnInit {
             fill: false,
             pointRadius: 2,
             pointHoverRadius: 5,
-            spanGaps: true
+            spanGaps: true,
+            yAxisID: 'y'
           };
         })
       };
+      this.valueSeriesViewOptions = {
+        ...this.valueSeriesViewOptions,
+        scales: {
+          ...this.valueSeriesViewOptions.scales,
+          y1: { ...(this.valueSeriesViewOptions.scales as any)?.y1, display: false }
+        }
+      };
+      this.projectionMessage = 'Projection uses total portfolio series. Clear multi-series filters for forecast.';
       return;
     }
 
     const pointsByDate = new Map(rows.map((row) => [row.change_date, this.toNumber(row.total_value)]));
-    this.valueSeriesChartData = {
-      labels,
-      datasets: [{
-        label: 'Total Value (₹)',
-        data: allDates.map((date) => pointsByDate.get(date) ?? 0),
-        borderColor: 'rgba(34, 197, 94, 1)',
-        backgroundColor: 'rgba(34, 197, 94, 0.12)',
-        tension: 0.35,
-        fill: true,
-        pointRadius: 2,
-        pointHoverRadius: 5
-      }]
-    };
-  }
+    const values = allDates.map((date) => pointsByDate.get(date) ?? 0);
+    const datasets: any[] = [{
+      label: 'Total Value (₹)',
+      data: [...values],
+      borderColor: 'rgba(34, 197, 94, 1)',
+      backgroundColor: 'rgba(34, 197, 94, 0.12)',
+      tension: 0.35,
+      fill: !this.showWealthIndex,
+      pointRadius: 2,
+      pointHoverRadius: 5,
+      yAxisID: 'y'
+    }];
 
-  applyFilters() {
-    this.applyingFilters = true;
-    // Reload all analytics using the same method (keeps existing behavior consistent)
-    this.loadAnalytics();
-    setTimeout(() => {
-      this.applyingFilters = false;
-    }, 300);
+    let chartLabels = [...labels];
+
+    if (this.showWealthIndex && values.length > 0 && values[0] > 0) {
+      const indexed = values.map((v) => (v / values[0]) * 100);
+      datasets.push({
+        label: 'Wealth Index (base 100)',
+        data: [...indexed],
+        borderColor: 'rgba(118, 75, 162, 1)',
+        backgroundColor: 'rgba(118, 75, 162, 0.08)',
+        tension: 0.35,
+        fill: false,
+        pointRadius: 0,
+        borderWidth: 2,
+        yAxisID: 'y1'
+      });
+    }
+
+    if (this.showProjection && values.length >= 2 && values[0] > 0) {
+      const firstDate = new Date(allDates[0]);
+      const lastDate = new Date(allDates[allDates.length - 1]);
+      const years = Math.max(
+        (lastDate.getTime() - firstDate.getTime()) / (1000 * 60 * 60 * 24 * 365.25),
+        1 / 12
+      );
+      const cagr = Math.pow(values[values.length - 1] / values[0], 1 / years) - 1;
+      this.projectionCagr = cagr * 100;
+
+      const monthlyRate = Math.pow(1 + cagr, 1 / 12) - 1;
+      const projected: (number | null)[] = values.map((_, i) =>
+        i === values.length - 1 ? values[i] : null
+      );
+
+      let cursor = values[values.length - 1];
+      const last = new Date(allDates[allDates.length - 1]);
+      for (let i = 1; i <= this.projectionMonths; i++) {
+        cursor = cursor * (1 + monthlyRate);
+        const next = new Date(last.getFullYear(), last.getMonth() + i, last.getDate());
+        chartLabels.push(this.formatSnapshotLabel(this.toDateKey(next)));
+        projected.push(cursor);
+        datasets[0].data.push(null);
+        if (this.showWealthIndex && datasets[1]) {
+          datasets[1].data.push((cursor / values[0]) * 100);
+        }
+      }
+      this.projectionEndValue = cursor;
+
+      datasets.push({
+        label: `Projection (${this.projectionMonths}M @ CAGR)`,
+        data: projected,
+        borderColor: 'rgba(245, 158, 11, 1)',
+        backgroundColor: 'rgba(245, 158, 11, 0.08)',
+        borderDash: [6, 4],
+        tension: 0.25,
+        fill: false,
+        pointRadius: 0,
+        yAxisID: 'y'
+      });
+
+      this.projectionMessage =
+        `Illustrative estimate from snapshot CAGR (${this.projectionCagr.toFixed(2)}%/yr) — not a guarantee.`;
+    } else if (this.showProjection) {
+      this.projectionMessage = 'Need at least 2 snapshots with positive starting value to project.';
+    }
+
+    this.valueSeriesChartData = { labels: chartLabels, datasets };
+    this.valueSeriesViewOptions = {
+      ...this.valueSeriesViewOptions,
+      scales: {
+        y: {
+          position: 'left',
+          ticks: {
+            callback: (value) => '₹' + Number(value).toLocaleString('en-IN')
+          }
+        },
+        y1: {
+          position: 'right',
+          display: this.showWealthIndex,
+          grid: { drawOnChartArea: false },
+          title: this.showWealthIndex ? { display: true, text: 'Index' } : undefined,
+          ticks: {
+            callback: (value) => Number(value).toFixed(0)
+          }
+        }
+      }
+    };
   }
 
   private ensureTargetsInitialized() {
@@ -1229,5 +1609,28 @@ export class AnalyticsComponent implements OnInit {
       const suggestion = targetValue - currentValue;
       return { investment_type: t, currentValue, currentPct, targetPct, targetValue, suggestion };
     }).sort((a, b) => Math.abs(b.suggestion) - Math.abs(a.suggestion));
+
+    this.targetPctSum = this.rebalanceRows.reduce((sum, r) => sum + (Number(r.targetPct) || 0), 0);
+    this.targetPctValid = Math.abs(this.targetPctSum - 100) <= 0.5;
+
+    this.rebalanceDriftChartData = {
+      labels: this.rebalanceRows.map((r) => r.investment_type),
+      datasets: [
+        {
+          label: 'Current %',
+          data: this.rebalanceRows.map((r) => r.currentPct),
+          backgroundColor: 'rgba(59, 130, 246, 0.75)',
+          borderColor: 'rgba(59, 130, 246, 1)',
+          borderWidth: 1
+        },
+        {
+          label: 'Target %',
+          data: this.rebalanceRows.map((r) => r.targetPct),
+          backgroundColor: 'rgba(16, 185, 129, 0.75)',
+          borderColor: 'rgba(16, 185, 129, 1)',
+          borderWidth: 1
+        }
+      ]
+    };
   }
 }

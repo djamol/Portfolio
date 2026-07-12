@@ -1,7 +1,12 @@
 <div class="card">
-  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; gap: 12px; flex-wrap: wrap;">
     <h2 style="margin: 0;">Portfolio Analytics</h2>
-    <a routerLink="/investments" class="btn btn-primary">Back to Investments</a>
+    <div class="header-actions">
+      <button type="button" class="btn btn-secondary" (click)="exportAllocationCsv()" [disabled]="!allocationLatestChartData.labels?.length">
+        Export Allocation
+      </button>
+      <a routerLink="/investments" class="btn btn-primary">Back to Investments</a>
+    </div>
   </div>
 
   <div *ngIf="errorMessage" style="background: #fee; color: #c33; padding: 12px; border-radius: 6px; margin-bottom: 20px;">
@@ -17,6 +22,16 @@
     <div class="stat-card">
       <h3>Total Investments</h3>
       <div class="value">{{ totalInvestments }}</div>
+    </div>
+    <div class="stat-card" *ngIf="insights?.topHoldings?.length">
+      <h3>Top Holding Share</h3>
+      <div class="value">{{ topHoldingPct() | number:'1.1-1' }}%</div>
+      <div class="stat-sub">{{ concentrationLabel() }}</div>
+    </div>
+    <div class="stat-card" *ngIf="projectionEndValue !== null">
+      <h3>Projected ({{ projectionMonths }}M)</h3>
+      <div class="value">₹{{ projectionEndValue | number:'1.2-2' }}</div>
+      <div class="stat-sub" *ngIf="projectionCagr !== null">CAGR {{ projectionCagr | number:'1.2-2' }}%/yr</div>
     </div>
   </div>
 
@@ -91,6 +106,21 @@
   </div>
 
   <div class="card" style="margin-top: 20px;">
+    <h3>Cashflow by Month</h3>
+    <p class="section-hint">Inflow, outflow, and net from investment history (unique to Analytics)</p>
+    <div *ngIf="cashflowChartData.labels && cashflowChartData.labels.length > 0" class="chart-container">
+      <canvas baseChart
+        [data]="cashflowChartData"
+        [options]="cashflowChartOptions"
+        [type]="'bar'">
+      </canvas>
+    </div>
+    <div *ngIf="!cashflowChartData.labels || cashflowChartData.labels.length === 0" style="text-align: center; padding: 40px; color: #6b7280;">
+      <p>No cashflow data available</p>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top: 20px;">
     <h3>Advance Analytics</h3>
 
     <div *ngIf="advanceErrorMessage" style="background: #fff7ed; color: #9a3412; padding: 12px; border-radius: 6px; margin-bottom: 16px;">
@@ -98,6 +128,15 @@
     </div>
 
     <div class="filters-bar">
+      <div class="range-presets">
+        <span class="preset-label">Quick range</span>
+        <button type="button" class="preset-btn" [class.active]="activeRangePreset === '3m'" (click)="applyRangePreset('3m')" [disabled]="applyingFilters">3M</button>
+        <button type="button" class="preset-btn" [class.active]="activeRangePreset === '6m'" (click)="applyRangePreset('6m')" [disabled]="applyingFilters">6M</button>
+        <button type="button" class="preset-btn" [class.active]="activeRangePreset === '1y'" (click)="applyRangePreset('1y')" [disabled]="applyingFilters">1Y</button>
+        <button type="button" class="preset-btn" [class.active]="activeRangePreset === 'ytd'" (click)="applyRangePreset('ytd')" [disabled]="applyingFilters">YTD</button>
+        <button type="button" class="preset-btn" [class.active]="activeRangePreset === 'all'" (click)="applyRangePreset('all')" [disabled]="applyingFilters">All</button>
+      </div>
+
       <div class="filters-toolbar">
         <div class="filters-title">Filters</div>
         <button
@@ -179,23 +218,47 @@
       </div>
     </div>
 
-    <div class="card">
+    <div class="advance-grid">
       <div class="advance-card">
-        <h4>Portfolio Value (Snapshots)</h4>
+        <div class="advance-card-header">
+          <div>
+            <h4>Portfolio Value (Snapshots)</h4>
+            <p class="section-hint">History with optional wealth index and CAGR projection</p>
+          </div>
+          <div class="series-toggles">
+            <label class="toggle-label">
+              <input type="checkbox" [(ngModel)]="showWealthIndex" (ngModelChange)="onValueSeriesViewChange()">
+              Wealth index
+            </label>
+            <label class="toggle-label">
+              <input type="checkbox" [(ngModel)]="showProjection" (ngModelChange)="onValueSeriesViewChange()">
+              Projection
+            </label>
+            <select [(ngModel)]="projectionMonths" (ngModelChange)="onValueSeriesViewChange()" class="chart-select compact" [disabled]="!showProjection">
+              <option [ngValue]="3">3M</option>
+              <option [ngValue]="6">6M</option>
+              <option [ngValue]="12">12M</option>
+            </select>
+          </div>
+        </div>
         <div *ngIf="valueSeriesChartData.labels && valueSeriesChartData.labels.length > 0" class="chart-container">
           <canvas baseChart
             [data]="valueSeriesChartData"
-            [options]="lineChartOptions"
+            [options]="valueSeriesViewOptions"
             [type]="'line'">
           </canvas>
         </div>
         <div *ngIf="!valueSeriesChartData.labels || valueSeriesChartData.labels.length === 0" style="text-align: center; padding: 24px; color: #6b7280;">
           <p>No snapshot data yet</p>
         </div>
+        <p class="projection-note" *ngIf="projectionMessage">{{ projectionMessage }}</p>
       </div>
 
       <div class="advance-card">
-        <h4>Latest Allocation (by Type)</h4>
+        <div class="advance-card-header">
+          <h4>Latest Allocation (by Type)</h4>
+          <button type="button" class="mini-btn" (click)="exportAllocationCsv()" [disabled]="!allocationLatestChartData.labels?.length">CSV</button>
+        </div>
         <div *ngIf="allocationLatestChartData.labels && allocationLatestChartData.labels.length > 0" class="chart-container">
           <canvas baseChart
             [data]="allocationLatestChartData"
@@ -237,6 +300,11 @@
           <div class="label">Latest total</div>
           <div class="big">₹{{ toNumber(insights.portfolio.latestValue) | number:'1.2-2' }}</div>
         </div>
+        <div class="insight-item" *ngIf="topHoldingPct() !== null">
+          <div class="label">Concentration risk</div>
+          <div class="big">{{ concentrationLabel() }}</div>
+          <div style="margin-top: 4px; color:#64748b; font-size: 13px;">Top holding {{ topHoldingPct() | number:'1.1-1' }}%</div>
+        </div>
       </div>
 
       <div *ngIf="!insightsLoading && insights && insights.topHoldings && insights.topHoldings.length" style="margin-top: 12px;">
@@ -260,14 +328,33 @@
     </div>
 
     <div class="advance-card" style="margin-top: 16px;">
-      <h4 style="margin: 0 0 10px 0;">Planning: Target Allocation + Rebalance</h4>
-      <div style="color:#64748b; font-size: 13px; margin-bottom: 10px;">
-        Set target % per type (saved locally in your browser).
+      <div class="advance-card-header">
+        <div>
+          <h4 style="margin: 0 0 6px 0;">Planning: Target Allocation + Rebalance</h4>
+          <div style="color:#64748b; font-size: 13px;">
+            Set target % per type (saved locally). Drift chart shows current vs target.
+          </div>
+        </div>
+        <button type="button" class="mini-btn" (click)="exportRebalanceCsv()" [disabled]="!rebalanceRows.length">Export CSV</button>
+      </div>
+
+      <div *ngIf="rebalanceRows.length" class="target-sum" [class.invalid]="!targetPctValid">
+        Target sum: {{ targetPctSum | number:'1.1-1' }}%
+        <span *ngIf="!targetPctValid"> — should be ~100%</span>
+        <span *ngIf="targetPctValid"> — balanced</span>
       </div>
 
       <div *ngIf="!rebalanceRows.length" style="padding: 12px; color:#64748b;">Load allocation to see planner.</div>
 
-      <div *ngIf="rebalanceRows.length" class="delta-table">
+      <div *ngIf="rebalanceDriftChartData.labels?.length" class="chart-container drift-chart">
+        <canvas baseChart
+          [data]="rebalanceDriftChartData"
+          [options]="rebalanceDriftChartOptions"
+          [type]="'bar'">
+        </canvas>
+      </div>
+
+      <div *ngIf="rebalanceRows.length" class="delta-table" style="margin-top: 12px;">
         <div class="delta-row delta-head">
           <div>Type</div><div class="right">Target %</div>
         </div>
@@ -293,6 +380,8 @@
       <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
         <h4 style="margin: 0;">Change Between Two Dates (Top Movers)</h4>
         <div class="delta-controls">
+          <button type="button" class="preset-btn" (click)="applyDeltaPreset('last2')" [disabled]="lastSnapshotDates.length < 2">Last 2 snapshots</button>
+          <button type="button" class="preset-btn" (click)="applyDeltaPreset('firstLast')" [disabled]="lastSnapshotDates.length < 2">First → Latest</button>
           <label>
             From
             <input type="date" [(ngModel)]="deltaFrom" class="date-input">
@@ -304,6 +393,7 @@
           <button class="btn btn-primary" (click)="loadDelta()" [disabled]="deltaLoading || !deltaFrom || !deltaTo">
             {{ deltaLoading ? 'Loading...' : 'Load' }}
           </button>
+          <button type="button" class="mini-btn" (click)="exportDeltaCsv()" [disabled]="!deltaRows.length">CSV</button>
         </div>
       </div>
 
