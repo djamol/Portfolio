@@ -174,6 +174,17 @@ async function createCategory(data) {
   return rows[0];
 }
 
+async function getAllCategories() {
+  const pool = getPool();
+  const [rows] = await pool.query(
+    `SELECT c.*, s.name as sub_type_name
+     FROM sub_type_categories c
+     LEFT JOIN sub_type_names s ON c.sub_type_name_id = s.id
+     ORDER BY c.investment_type, c.category ASC`
+  );
+  return rows;
+}
+
 async function deleteCategory(id) {
   const pool = getPool();
   await pool.query('DELETE FROM sub_type_categories WHERE id = ?', [id]);
@@ -243,6 +254,7 @@ module.exports = {
   deleteSubTypeName,
   getCategories,
   createCategory,
+  getAllCategories,
   deleteCategory,
   findInvestmentByKey,
   upsertImportedInvestment

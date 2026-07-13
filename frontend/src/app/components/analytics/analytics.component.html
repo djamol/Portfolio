@@ -406,8 +406,7 @@
             </div>
             <div class="delta-row" *ngFor="let r of topGainers">
               <div class="name">
-                <div class="title">{{ r.sub_type_name || r.website_app_name }}</div>
-                <div class="meta">{{ r.investment_type }} • {{ r.sub_type_category || '—' }}</div>
+                <div class="title">{{ moverLabel(r) }}</div>
               </div>
               <div class="right pos">₹{{ toNumber(r.delta) | number:'1.2-2' }}</div>
             </div>
@@ -422,8 +421,7 @@
             </div>
             <div class="delta-row" *ngFor="let r of topLosers">
               <div class="name">
-                <div class="title">{{ r.sub_type_name || r.website_app_name }}</div>
-                <div class="meta">{{ r.investment_type }} • {{ r.sub_type_category || '—' }}</div>
+                <div class="title">{{ moverLabel(r) }}</div>
               </div>
               <div class="right neg">₹{{ toNumber(r.delta) | number:'1.2-2' }}</div>
             </div>

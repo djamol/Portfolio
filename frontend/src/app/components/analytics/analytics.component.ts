@@ -553,7 +553,7 @@ export class AnalyticsComponent implements OnInit {
       'Holding,Platform,Type,Sub Type,Category,Amount From,Amount To,Delta',
       ...this.deltaRows.map((r) =>
         [
-          this.csvEscape(r.sub_type_name || r.website_app_name || ''),
+          this.csvEscape(this.moverLabel(r)),
           this.csvEscape(r.website_app_name || ''),
           this.csvEscape(r.investment_type || ''),
           this.csvEscape(r.sub_type_name || ''),
@@ -1389,11 +1389,15 @@ export class AnalyticsComponent implements OnInit {
 
     this.analyticsService.getDelta(this.deltaFrom, this.deltaTo).subscribe({
       next: (response) => {
-        this.deltaRows = response.data || [];
-        const gainers = [...this.deltaRows].sort((a, b) => Number(b.delta) - Number(a.delta));
-        const losers = [...this.deltaRows].sort((a, b) => Number(a.delta) - Number(b.delta));
-        this.topGainers = gainers.slice(0, 10);
-        this.topLosers = losers.slice(0, 10);
+        this.deltaRows = (response.data || []).filter((r) => this.toNumber(r.delta) !== 0);
+        this.topGainers = [...this.deltaRows]
+          .filter((r) => this.toNumber(r.delta) > 0)
+          .sort((a, b) => this.toNumber(b.delta) - this.toNumber(a.delta))
+          .slice(0, 10);
+        this.topLosers = [...this.deltaRows]
+          .filter((r) => this.toNumber(r.delta) < 0)
+          .sort((a, b) => this.toNumber(a.delta) - this.toNumber(b.delta))
+          .slice(0, 10);
         this.deltaLoading = false;
       },
       error: (error) => {
@@ -1402,6 +1406,13 @@ export class AnalyticsComponent implements OnInit {
         this.deltaLoading = false;
       }
     });
+  }
+
+  moverLabel(row: DeltaRow): string {
+    return [row.website_app_name, row.investment_type, row.sub_type_name, row.sub_type_category]
+      .map((part) => (part == null ? '' : String(part).trim()))
+      .filter(Boolean)
+      .join('-') || 'Unknown';
   }
 
   toNumber(value: unknown): number {

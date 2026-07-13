@@ -230,7 +230,14 @@
 .title {
   font-weight: 600;
   color: #0f172a;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
+  line-height: 1.35;
+  min-width: 0;
+  word-break: break-word;
+}
+
+.movers .list-row .title {
+  flex: 1;
 }
 
 .meta {

@@ -114,14 +114,14 @@
         <div>
           <h4 class="pos-title">Gainers</h4>
           <div class="list-row" *ngFor="let r of topGainers">
-            <div class="title">{{ r.sub_type_name || r.website_app_name }}</div>
+            <div class="title">{{ moverLabel(r) }}</div>
             <div class="right pos">₹{{ toNumber(r.delta) | number:'1.0-0' }}</div>
           </div>
         </div>
         <div>
           <h4 class="neg-title">Losers</h4>
           <div class="list-row" *ngFor="let r of topLosers">
-            <div class="title">{{ r.sub_type_name || r.website_app_name }}</div>
+            <div class="title">{{ moverLabel(r) }}</div>
             <div class="right neg">₹{{ toNumber(r.delta) | number:'1.0-0' }}</div>
           </div>
         </div>

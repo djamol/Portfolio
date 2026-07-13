@@ -273,12 +273,26 @@ export class DashboardComponent implements OnInit {
     return 0;
   }
 
+  /** Platform-Type-SubType-Category label for movers. */
+  moverLabel(row: DeltaRow): string {
+    return [row.website_app_name, row.investment_type, row.sub_type_name, row.sub_type_category]
+      .map((part) => (part == null ? '' : String(part).trim()))
+      .filter(Boolean)
+      .join('-') || 'Unknown';
+  }
+
   private loadMovers() {
     this.analyticsService.getDelta(this.deltaFrom, this.deltaTo).subscribe({
       next: (res) => {
         const rows = (res.data || []).filter((r) => this.toNumber(r.delta) !== 0);
-        this.topGainers = [...rows].sort((a, b) => this.toNumber(b.delta) - this.toNumber(a.delta)).slice(0, 5);
-        this.topLosers = [...rows].sort((a, b) => this.toNumber(a.delta) - this.toNumber(b.delta)).slice(0, 5);
+        this.topGainers = [...rows]
+          .filter((r) => this.toNumber(r.delta) > 0)
+          .sort((a, b) => this.toNumber(b.delta) - this.toNumber(a.delta))
+          .slice(0, 5);
+        this.topLosers = [...rows]
+          .filter((r) => this.toNumber(r.delta) < 0)
+          .sort((a, b) => this.toNumber(a.delta) - this.toNumber(b.delta))
+          .slice(0, 5);
       },
       error: () => {
         this.topGainers = [];

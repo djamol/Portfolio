@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const store = require('../db');
+const { syncLookupTablesFromInvestments } = require('../utils/sync-lookup-tables');
 
 router.get('/sub-type-names', async (req, res) => {
   try {
@@ -68,6 +69,20 @@ router.post('/categories', async (req, res) => {
       });
     }
     console.error('Error creating category:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * Scan investments, group by investment_type + sub_type_name (+ category),
+ * and insert any missing rows into sub_type_names / sub_type_categories.
+ */
+router.post('/sync-from-investments', async (req, res) => {
+  try {
+    const data = await syncLookupTablesFromInvestments(store);
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error('Error syncing lookup tables from investments:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });

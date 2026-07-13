@@ -285,6 +285,24 @@ async function createCategory(data) {
   return formatDoc({ ...doc, sub_type_name: subTypeName });
 }
 
+async function getAllCategories() {
+  const categories = await getDb().collection('sub_type_categories')
+    .find({})
+    .sort({ investment_type: 1, category: 1 })
+    .toArray();
+
+  const subTypeIds = [...new Set(categories.map((c) => c.sub_type_name_id).filter(Boolean))];
+  const subTypes = subTypeIds.length
+    ? await getDb().collection('sub_type_names').find({ id: { $in: subTypeIds } }).toArray()
+    : [];
+  const subTypeMap = Object.fromEntries(subTypes.map((s) => [s.id, s.name]));
+
+  return categories.map((c) => formatDoc({
+    ...c,
+    sub_type_name: c.sub_type_name_id ? subTypeMap[c.sub_type_name_id] || null : null
+  }));
+}
+
 async function deleteCategory(id) {
   await getDb().collection('sub_type_categories').deleteOne({ id: Number(id) });
 }
@@ -425,6 +443,7 @@ module.exports = {
   deleteSubTypeName,
   getCategories,
   createCategory,
+  getAllCategories,
   deleteCategory,
   findInvestmentByKey,
   upsertImportedInvestment,
