@@ -1,9 +1,8 @@
 -- Portfolio Management SQL Export
--- Generated: 2026-07-13 (FoF category merge fix)
--- Source: mysql (post-processed: FoF Fund -> FoF, duplicate holdings merged)
+-- Generated: 2026-07-13T17:36:38.183Z
+-- Source: mysql
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS=0;
-
 
 -- Table: sub_type_names (33 rows)
 LOCK TABLES `sub_type_names` WRITE;
@@ -41,7 +40,6 @@ INSERT INTO `sub_type_names` (`id`, `name`, `investment_type`, `created_at`) VAL
 (303, 'LIC', 'Mutual Fund', '2026-06-24 14:21:01'),
 (341, 'EPF', 'PPF', '2026-07-09 14:59:22'),
 (348, 'Real estate', 'Saving Bank Balance', '2026-07-13 19:38:45');
-
 UNLOCK TABLES;
 
 -- Table: sub_type_categories (61 rows)
@@ -96,9 +94,7 @@ INSERT INTO `sub_type_categories` (`id`, `category`, `sub_type_name_id`, `invest
 (72, 'All', NULL, 'Crypto', '2026-01-24 15:21:07'),
 (247, 'Hang Seng Tech ETF', NULL, 'ETF', '2026-06-02 14:48:49'),
 (248, 'ICICI Bank', NULL, 'FD', '2026-06-13 13:30:43'),
-(281, 'Nifty Fin Svc Ex-Bank ETF', NULL, 'ETF', '2026-06-24 13:14:48');
-
-INSERT INTO `sub_type_categories` (`id`, `category`, `sub_type_name_id`, `investment_type`, `created_at`) VALUES
+(281, 'Nifty Fin Svc Ex-Bank ETF', NULL, 'ETF', '2026-06-24 13:14:48'),
 (282, 'Nifty Midcap 50 ETF', NULL, 'ETF', '2026-06-24 13:14:49'),
 (283, 'Nifty 50 ETF', NULL, 'ETF', '2026-06-24 13:14:49'),
 (284, 'Gold ETF', NULL, 'ETF', '2026-06-24 13:14:49'),
@@ -110,7 +106,6 @@ INSERT INTO `sub_type_categories` (`id`, `category`, `sub_type_name_id`, `invest
 (308, 'Gold Fund', NULL, 'Mutual Fund', '2026-06-24 14:17:08'),
 (353, 'Employees Provident Fund', NULL, 'PPF', '2026-07-09 14:59:48'),
 (388, 'Properties', NULL, 'Saving Bank Balance', '2026-07-13 19:40:11');
-
 UNLOCK TABLES;
 
 -- Table: investments (201 rows)
@@ -165,9 +160,7 @@ INSERT INTO `investments` (`id`, `website_app_name`, `investment_type`, `sub_typ
 (47, 'ICICI Direct', 'Mutual Fund', 'Mahindra', 'Mid Cap Fund', '2605.90', '2026-07-13', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: ', '2026-01-24 12:44:01', '2026-07-13 22:12:07'),
 (48, 'HDFC Invest Now', 'Mutual Fund', 'Aditya Birla Sun Life', 'Small Cap Fund', '0.00', '2026-05-01', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: 1042059524', '2026-01-24 12:45:55', '2026-05-01 05:29:24'),
 (49, 'HDFC Invest Now', 'Mutual Fund', 'LIC', 'Small Cap', '0.00', '2026-07-09', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: 9.10128E+11', '2026-01-24 12:45:55', '2026-07-09 18:44:04'),
-(50, 'HDFC Invest Now', 'Mutual Fund', 'Axis', 'Small Cap Fund', '10719.75', '2026-07-09', 'Imported from CSV on 24/01/2026 - Aggregated value from 4 folios: 9.10117E+11,9.10118E+11,9.10118E+11,9.10181E+11', '2026-01-24 12:45:56', '2026-07-09 18:41:46');
-
-INSERT INTO `investments` (`id`, `website_app_name`, `investment_type`, `sub_type_name`, `sub_type_category`, `amount`, `investment_date`, `notes`, `created_at`, `updated_at`) VALUES
+(50, 'HDFC Invest Now', 'Mutual Fund', 'Axis', 'Small Cap Fund', '10719.75', '2026-07-09', 'Imported from CSV on 24/01/2026 - Aggregated value from 4 folios: 9.10117E+11,9.10118E+11,9.10118E+11,9.10181E+11', '2026-01-24 12:45:56', '2026-07-09 18:41:46'),
 (51, 'HDFC Invest Now', 'Mutual Fund', 'Bandhan', 'Large and Mid Cap Fund', '0.00', '2026-07-09', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: 9108410531', '2026-01-24 12:45:56', '2026-07-09 18:43:51'),
 (52, 'HDFC Invest Now', 'Mutual Fund', 'Invesco', 'Mid Cap Fund', '0.00', '2026-07-09', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: 7079785/56', '2026-01-24 12:45:56', '2026-07-09 18:43:46'),
 (53, 'HDFC Invest Now', 'Mutual Fund', 'Motilal Oswal', 'Banking & Financial Services Fund', '0.00', '2026-07-09', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: 91022927242', '2026-01-24 12:45:56', '2026-07-09 18:43:09'),
@@ -269,9 +262,7 @@ INSERT INTO `investments` (`id`, `website_app_name`, `investment_type`, `sub_typ
 (151, 'Dhan App - Amol', 'Mutual Fund', 'Axis', 'Greater China Equity FoF', '5527.15', '2026-07-13', 'Merged FoF category duplicates on 2026-07-13', '2026-05-01 09:17:25', '2026-07-13 22:07:49'),
 (153, 'Dhan App - Amol', 'Mutual Fund', 'HSBC', 'Multi Asset Active FoF', '23568.25', '2026-07-13', 'Merged FoF category duplicates on 2026-07-13', '2026-05-01 09:17:25', '2026-07-13 22:07:48'),
 (154, 'Dhan App - Amol', 'Mutual Fund', 'Nippon India', 'Multi Asset Allocation Fund', '29013.02', '2026-07-13', 'Imported from CSV on 01/05/2026 - Aggregated value from 1 folio: ', '2026-05-01 09:17:25', '2026-07-13 22:07:40'),
-(155, 'Dhan App - Vishnu', 'Mutual Fund', 'Motilal Oswal', 'Flexi Cap Fund', '26850.04', '2026-07-13', 'Imported from CSV on 01/05/2026 - Aggregated value from 1 folio: ', '2026-05-01 09:34:06', '2026-07-13 22:02:29');
-
-INSERT INTO `investments` (`id`, `website_app_name`, `investment_type`, `sub_type_name`, `sub_type_category`, `amount`, `investment_date`, `notes`, `created_at`, `updated_at`) VALUES
+(155, 'Dhan App - Vishnu', 'Mutual Fund', 'Motilal Oswal', 'Flexi Cap Fund', '26850.04', '2026-07-13', 'Imported from CSV on 01/05/2026 - Aggregated value from 1 folio: ', '2026-05-01 09:34:06', '2026-07-13 22:02:29'),
 (156, 'Dhan App - Vishnu', 'Mutual Fund', 'ICICI Prudential', 'Index Fund', '10883.53', '2026-07-13', 'Imported from CSV on 01/05/2026 - Aggregated value from 1 folio: ', '2026-05-01 09:34:06', '2026-07-13 22:02:27'),
 (157, 'Wint Wealth', 'Bond', 'Corporate Bond', 'Corporate', '15844.00', '2026-06-24', 'Unigold Finance return 5k  principal', '2026-05-01 09:54:33', '2026-06-24 13:42:26'),
 (158, 'All Bank Account', 'Saving Bank Balance', 'Savings Account', 'Emergency Fund', '20000.00', '2026-06-24', 'HDFC+ ICICI+ SBI + DCB + Kotak 811(Vishnu)', '2026-05-01 10:03:54', '2026-06-24 14:26:23'),
@@ -326,10 +317,9 @@ PPF AccountsnSelect	Account Number	Name	Balance	Opening Date	Maturity DatenTwo P
 
 INSERT INTO `investments` (`id`, `website_app_name`, `investment_type`, `sub_type_name`, `sub_type_category`, `amount`, `investment_date`, `notes`, `created_at`, `updated_at`) VALUES
 (211, 'PLOT', 'Saving Bank Balance', 'Real estate', 'Properties', '6100000.00', '2026-07-13', 'Waluj Plot 1776SQ. FT.', '2026-07-13 19:40:53', '2026-07-13 19:40:53');
-
 UNLOCK TABLES;
 
--- Table: investment_history (1028 rows)
+-- Table: investment_history (1019 rows)
 LOCK TABLES `investment_history` WRITE;
 INSERT INTO `investment_history` (`id`, `investment_id`, `amount`, `change_date`, `change_type`, `notes`, `created_at`) VALUES
 (1, 1, '546134.90', '2026-01-20', 'added', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: ', '2026-01-24 12:44:01'),
@@ -381,9 +371,7 @@ INSERT INTO `investment_history` (`id`, `investment_id`, `amount`, `change_date`
 (47, 47, '2306.71', '2026-01-20', 'added', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: ', '2026-01-24 12:44:01'),
 (48, 48, '66406.54', '2026-01-20', 'added', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: 1042059524', '2026-01-24 12:45:55'),
 (49, 49, '80546.77', '2026-01-20', 'added', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: 9.10128E+11', '2026-01-24 12:45:55'),
-(50, 50, '394408.41', '2026-01-20', 'added', 'Imported from CSV on 24/01/2026 - Aggregated value from 4 folios: 9.10117E+11,9.10118E+11,9.10118E+11,9.10181E+11', '2026-01-24 12:45:56');
-
-INSERT INTO `investment_history` (`id`, `investment_id`, `amount`, `change_date`, `change_type`, `notes`, `created_at`) VALUES
+(50, 50, '394408.41', '2026-01-20', 'added', 'Imported from CSV on 24/01/2026 - Aggregated value from 4 folios: 9.10117E+11,9.10118E+11,9.10118E+11,9.10181E+11', '2026-01-24 12:45:56'),
 (51, 51, '5096.39', '2026-01-20', 'added', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: 9108410531', '2026-01-24 12:45:56'),
 (52, 52, '20.04', '2026-01-20', 'added', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: 7079785/56', '2026-01-24 12:45:56'),
 (53, 53, '19437.54', '2026-01-20', 'added', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: 91022927242', '2026-01-24 12:45:56'),
@@ -485,9 +473,7 @@ INSERT INTO `investment_history` (`id`, `investment_id`, `amount`, `change_date`
 (150, 136, '2708609.00', '2026-01-20', 'added', 'All FD', '2026-01-24 14:43:42'),
 (151, 137, '340344.17', '2026-01-20', 'added', 'current value all schemes and AMC', '2026-01-24 14:46:38'),
 (152, 138, '248228.86', '2026-01-20', 'added', 'Serving Gold Bond', '2026-01-24 14:50:29'),
-(153, 139, '50000.00', '2026-01-20', 'added', 'FD', '2026-01-24 14:51:56');
-
-INSERT INTO `investment_history` (`id`, `investment_id`, `amount`, `change_date`, `change_type`, `notes`, `created_at`) VALUES
+(153, 139, '50000.00', '2026-01-20', 'added', 'FD', '2026-01-24 14:51:56'),
 (154, 140, '10000.00', '2026-01-20', 'added', 'Floating Rate Savings Bonds 2020 (Taxable)', '2026-01-24 14:52:41'),
 (155, 141, '220836.00', '2026-01-20', 'added', 'FD', '2026-01-24 14:54:37'),
 (157, 143, '219651.00', '2026-01-20', 'added', 'Bank FD -DCB Bank', '2026-01-24 15:01:53'),
@@ -589,9 +575,7 @@ INSERT INTO `investment_history` (`id`, `investment_id`, `amount`, `change_date`
 (413, 130, '1843.99', '2026-05-01', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: ', '2026-05-01 09:34:06'),
 (414, 128, '13485.26', '2026-05-01', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: ', '2026-05-01 09:34:06'),
 (415, 124, '51331.73', '2026-05-01', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: ', '2026-05-01 09:34:06'),
-(416, 117, '70595.80', '2026-05-01', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: ', '2026-05-01 09:34:06');
-
-INSERT INTO `investment_history` (`id`, `investment_id`, `amount`, `change_date`, `change_type`, `notes`, `created_at`) VALUES
+(416, 117, '70595.80', '2026-05-01', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: ', '2026-05-01 09:34:06'),
 (417, 122, '8220.22', '2026-05-01', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: ', '2026-05-01 09:34:06'),
 (418, 119, '10516.44', '2026-05-01', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: ', '2026-05-01 09:34:06'),
 (419, 120, '60749.97', '2026-05-01', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: ', '2026-05-01 09:34:06'),
@@ -693,9 +677,7 @@ INSERT INTO `investment_history` (`id`, `investment_id`, `amount`, `change_date`
 (516, 155, '25379.78', '2026-05-26', 'updated', 'Imported from CSV on 01/05/2026 - Aggregated value from 1 folio: ', '2026-05-26 15:51:46'),
 (517, 130, '1889.76', '2026-05-26', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: ', '2026-05-26 15:51:47'),
 (518, 124, '51473.97', '2026-05-26', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: ', '2026-05-26 15:51:48'),
-(519, 117, '84553.69', '2026-05-26', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: ', '2026-05-26 15:51:49');
-
-INSERT INTO `investment_history` (`id`, `investment_id`, `amount`, `change_date`, `change_type`, `notes`, `created_at`) VALUES
+(519, 117, '84553.69', '2026-05-26', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: ', '2026-05-26 15:51:49'),
 (520, 122, '8313.57', '2026-05-26', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: ', '2026-05-26 15:51:50'),
 (521, 119, '10695.01', '2026-05-26', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: ', '2026-05-26 15:51:51'),
 (522, 120, '61566.27', '2026-05-26', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: ', '2026-05-26 15:51:52'),
@@ -797,9 +779,7 @@ INSERT INTO `investment_history` (`id`, `investment_id`, `amount`, `change_date`
 (621, 134, '38486.76', '2026-06-24', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: ', '2026-06-24 12:27:18'),
 (622, 122, '8347.15', '2026-06-24', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: ', '2026-06-24 12:27:19'),
 (623, 121, '4797.07', '2026-06-24', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: ', '2026-06-24 12:27:20'),
-(624, 132, '19024.62', '2026-06-24', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: ', '2026-06-24 12:27:21');
-
-INSERT INTO `investment_history` (`id`, `investment_id`, `amount`, `change_date`, `change_type`, `notes`, `created_at`) VALUES
+(624, 132, '19024.62', '2026-06-24', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: ', '2026-06-24 12:27:21'),
 (625, 123, '50443.02', '2026-06-24', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: ', '2026-06-24 12:27:22'),
 (627, 156, '10646.99', '2026-06-24', 'updated', 'Imported from CSV on 01/05/2026 - Aggregated value from 1 folio: ', '2026-06-24 12:27:23'),
 (628, 120, '62298.32', '2026-06-24', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: ', '2026-06-24 12:27:24'),
@@ -901,9 +881,7 @@ INSERT INTO `investment_history` (`id`, `investment_id`, `amount`, `change_date`
 (724, 61, '6788.26', '2026-06-24', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: 31010655021', '2026-06-24 14:20:19'),
 (725, 49, '6095.33', '2026-06-24', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: 9.10128E+11', '2026-06-24 14:21:09'),
 (726, 59, '5437.48', '2026-06-24', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: 20507636/21', '2026-06-24 14:21:49'),
-(727, 68, '4849.73', '2026-06-24', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: 4.77339E+11', '2026-06-24 14:22:21');
-
-INSERT INTO `investment_history` (`id`, `investment_id`, `amount`, `change_date`, `change_type`, `notes`, `created_at`) VALUES
+(727, 68, '4849.73', '2026-06-24', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: 4.77339E+11', '2026-06-24 14:22:21'),
 (728, 54, '4568.09', '2026-06-24', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: 27759571/55', '2026-06-24 14:22:50'),
 (729, 50, '3859.26', '2026-06-24', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 4 folios: 9.10117E+11,9.10118E+11,9.10118E+11,9.10181E+11', '2026-06-24 14:23:08'),
 (730, 66, '3199.10', '2026-06-24', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: 4.77253E+11', '2026-06-24 14:23:46'),
@@ -1005,9 +983,7 @@ INSERT INTO `investment_history` (`id`, `investment_id`, `amount`, `change_date`
 (1006, 187, '0.00', '2025-06-09', 'updated', 'Migrated from Google Sheets snapshot — June 9, 2025', '2026-07-09 00:00:00'),
 (1007, 188, '311711.00', '2025-06-09', 'updated', 'Migrated from Google Sheets snapshot — June 9, 2025', '2026-07-09 00:00:00'),
 (1008, 189, '139355.00', '2025-06-09', 'updated', 'Migrated from Google Sheets snapshot — June 9, 2025', '2026-07-09 00:00:00'),
-(1009, 190, '2955609.00', '2025-06-09', 'updated', 'Migrated from Google Sheets snapshot — June 9, 2025', '2026-07-09 00:00:00');
-
-INSERT INTO `investment_history` (`id`, `investment_id`, `amount`, `change_date`, `change_type`, `notes`, `created_at`) VALUES
+(1009, 190, '2955609.00', '2025-06-09', 'updated', 'Migrated from Google Sheets snapshot — June 9, 2025', '2026-07-09 00:00:00'),
 (1010, 191, '3757877.00', '2025-06-09', 'updated', 'Migrated from Google Sheets snapshot — June 9, 2025', '2026-07-09 00:00:00'),
 (1011, 192, '49000.00', '2025-06-09', 'updated', 'Migrated from Google Sheets snapshot — June 9, 2025', '2026-07-09 00:00:00'),
 (1012, 193, '263489.00', '2025-06-09', 'updated', 'Migrated from Google Sheets snapshot — June 9, 2025', '2026-07-09 00:00:00'),
@@ -1109,9 +1085,7 @@ INSERT INTO `investment_history` (`id`, `investment_id`, `amount`, `change_date`
 (1106, 185, '210592.00', '2025-09-11', 'updated', 'Migrated from Google Sheets snapshot — September 11, 2025', '2026-07-09 00:00:00'),
 (1107, 186, '5000.00', '2025-09-11', 'updated', 'Migrated from Google Sheets snapshot — September 11, 2025', '2026-07-09 00:00:00'),
 (1108, 187, '0.00', '2025-09-11', 'updated', 'Migrated from Google Sheets snapshot — September 11, 2025', '2026-07-09 00:00:00'),
-(1109, 188, '688000.00', '2025-09-11', 'updated', 'Migrated from Google Sheets snapshot — September 11, 2025', '2026-07-09 00:00:00');
-
-INSERT INTO `investment_history` (`id`, `investment_id`, `amount`, `change_date`, `change_type`, `notes`, `created_at`) VALUES
+(1109, 188, '688000.00', '2025-09-11', 'updated', 'Migrated from Google Sheets snapshot — September 11, 2025', '2026-07-09 00:00:00'),
 (1110, 189, '297000.00', '2025-09-11', 'updated', 'Migrated from Google Sheets snapshot — September 11, 2025', '2026-07-09 00:00:00'),
 (1111, 190, '2955609.00', '2025-09-11', 'updated', 'Migrated from Google Sheets snapshot — September 11, 2025', '2026-07-09 00:00:00'),
 (1112, 191, '3842500.00', '2025-09-11', 'updated', 'Migrated from Google Sheets snapshot — September 11, 2025', '2026-07-09 00:00:00'),
@@ -1181,11 +1155,6 @@ INSERT INTO `investment_history` (`id`, `investment_id`, `amount`, `change_date`
 (1178, 82, '24201.09', '2026-07-09', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: ', '2026-07-09 14:48:45'),
 (1179, 89, '95205.90', '2026-07-09', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: ', '2026-07-09 14:48:45'),
 (1180, 150, '18251.56', '2026-07-09', 'updated', 'Imported from CSV on 01/05/2026 - Aggregated value from 1 folio: ', '2026-07-09 14:48:45'),
-(1181, 94, '0.00', '2026-07-09', 'updated', 'Duplicate :Already added with another sub type', '2026-07-09 14:50:00'),
-(1182, 153, '0.00', '2026-07-09', 'updated', 'Duplicate :Already added with another sub type', '2026-07-09 14:50:07'),
-(1183, 149, '0.00', '2026-07-09', 'updated', 'Duplicate :Already added with another sub type', '2026-07-09 14:50:13'),
-(1184, 151, '0.00', '2026-07-09', 'updated', 'Duplicate :Already added with another sub type', '2026-07-09 14:50:20'),
-(1185, 87, '0.00', '2026-07-09', 'updated', 'Duplicate :Already added with another sub type', '2026-07-09 14:50:28'),
 (1186, 170, '31352.85', '2026-07-09', 'updated', 'Imported from Dhan ETF CSV on 24/06/2026', '2026-07-09 14:51:24'),
 (1187, 171, '57625.03', '2026-07-09', 'updated', 'Imported from Dhan ETF CSV on 24/06/2026', '2026-07-09 14:51:24'),
 (1188, 172, '88710.88', '2026-07-09', 'updated', 'Imported from Dhan ETF CSV on 24/06/2026', '2026-07-09 14:51:24'),
@@ -1213,17 +1182,11 @@ INSERT INTO `investment_history` (`id`, `investment_id`, `amount`, `change_date`
 (1212, 118, '122541.92', '2026-07-09', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 2 folios: ', '2026-07-09 14:54:27'),
 (1213, 167, '15033.22', '2026-07-09', 'updated', 'Imported from CSV on 24/06/2026 - Aggregated value from 1 folio: ', '2026-07-09 14:54:27'),
 (1214, 125, '17314.41', '2026-07-09', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: ', '2026-07-09 14:54:27'),
-(1215, 166, '29939.21', '2026-07-09', 'updated', 'Imported from CSV on 24/06/2026 - Aggregated value from 1 folio: ', '2026-07-09 14:54:27');
-
-INSERT INTO `investment_history` (`id`, `investment_id`, `amount`, `change_date`, `change_type`, `notes`, `created_at`) VALUES
+(1215, 166, '29939.21', '2026-07-09', 'updated', 'Imported from CSV on 24/06/2026 - Aggregated value from 1 folio: ', '2026-07-09 14:54:27'),
 (1217, 126, '28017.14', '2026-07-09', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: ', '2026-07-09 14:54:27'),
 (1218, 156, '10664.95', '2026-07-09', 'updated', 'Imported from CSV on 01/05/2026 - Aggregated value from 1 folio: ', '2026-07-09 14:54:27'),
 (1220, 131, '12170.01', '2026-07-09', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: ', '2026-07-09 14:54:27'),
 (1221, 155, '25890.51', '2026-07-09', 'updated', 'Imported from CSV on 01/05/2026 - Aggregated value from 1 folio: ', '2026-07-09 14:54:27'),
-(1222, 129, '0.00', '2026-07-09', 'updated', 'Duplicate', '2026-07-09 14:55:16'),
-(1223, 133, '0.00', '2026-07-09', 'updated', 'Duplicate', '2026-07-09 14:55:22'),
-(1224, 127, '0.00', '2026-07-09', 'updated', 'Duplicate', '2026-07-09 14:55:28'),
-(1225, 128, '0.00', '2026-07-09', 'updated', 'Duplicate', '2026-07-09 14:55:34'),
 (1227, 201, '100500.00', '2026-07-09', 'added', '15yr locking', '2026-07-09 15:00:40'),
 (1229, 201, '100500.00', '2026-07-09', 'updated', '15yr locking', '2026-07-09 15:00:59'),
 (1231, 162, '278070.00', '2026-07-09', 'updated', 'Government-backed saving schemes
@@ -1266,9 +1229,7 @@ PPF AccountsnSelect	Account Number	Name	Balance	Opening Date	Maturity DatenTwo P
 (1268, 42, '5630.96', '2026-07-09', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: ', '2026-07-09 15:15:46'),
 (1269, 39, '7573.83', '2026-07-09', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: ', '2026-07-09 15:15:46'),
 (1270, 5, '17744.37', '2026-07-09', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: ', '2026-07-09 15:15:46'),
-(1271, 16, '57119.38', '2026-07-09', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: ', '2026-07-09 15:15:46');
-
-INSERT INTO `investment_history` (`id`, `investment_id`, `amount`, `change_date`, `change_type`, `notes`, `created_at`) VALUES
+(1271, 16, '57119.38', '2026-07-09', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: ', '2026-07-09 15:15:46'),
 (1272, 202, '46018.81', '2026-07-09', 'added', 'Imported from CSV on 09/07/2026 - Aggregated value from 1 folio: 9.10128E+11', '2026-07-09 18:41:46'),
 (1273, 50, '10719.75', '2026-07-09', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 4 folios: 9.10117E+11,9.10118E+11,9.10118E+11,9.10181E+11', '2026-07-09 18:41:46'),
 (1274, 203, '5555.44', '2026-07-09', 'added', 'Imported from CSV on 09/07/2026 - Aggregated value from 1 folio: 9108410531', '2026-07-09 18:41:46'),
@@ -1277,7 +1238,9 @@ INSERT INTO `investment_history` (`id`, `investment_id`, `amount`, `change_date`
 (1277, 55, '182155.96', '2026-07-09', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 2 folios: 26180180/69,27759571/55', '2026-07-09 18:41:46'),
 (1278, 56, '40323.88', '2026-07-09', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 2 folios: 26180180/69,27759571/55', '2026-07-09 18:41:46'),
 (1279, 206, '39051.89', '2026-07-09', 'added', 'Imported from CSV on 09/07/2026 - Aggregated value from 1 folio: 20507636/21', '2026-07-09 18:41:46'),
-(1280, 60, '2815.29', '2026-07-09', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: 31020372611', '2026-07-09 18:41:46'),
+(1280, 60, '2815.29', '2026-07-09', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: 31020372611', '2026-07-09 18:41:46');
+
+INSERT INTO `investment_history` (`id`, `investment_id`, `amount`, `change_date`, `change_type`, `notes`, `created_at`) VALUES
 (1281, 207, '50860.95', '2026-07-09', 'added', 'Imported from CSV on 09/07/2026 - Aggregated value from 1 folio: 31010655021', '2026-07-09 18:41:46'),
 (1282, 62, '2519.54', '2026-07-09', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: 77713495111', '2026-07-09 18:41:46'),
 (1283, 63, '79019.46', '2026-07-09', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 4 folios: 77713483216,77713550092,77713559145,77713562003', '2026-07-09 18:41:46'),
@@ -1318,9 +1281,7 @@ INSERT INTO `investment_history` (`id`, `investment_id`, `amount`, `change_date`
 (1318, 124, '52044.15', '2026-07-13', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: ', '2026-07-13 22:02:17'),
 (1319, 117, '87455.99', '2026-07-13', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: ', '2026-07-13 22:02:18'),
 (1320, 119, '10936.23', '2026-07-13', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: ', '2026-07-13 22:02:18'),
-(1321, 129, '54103.67', '2026-07-13', 'updated', 'Duplicate', '2026-07-13 22:02:19');
-
-INSERT INTO `investment_history` (`id`, `investment_id`, `amount`, `change_date`, `change_type`, `notes`, `created_at`) VALUES
+(1321, 129, '54103.67', '2026-07-13', 'updated', 'Duplicate', '2026-07-13 22:02:19'),
 (1322, 130, '1931.77', '2026-07-13', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: ', '2026-07-13 22:02:19'),
 (1323, 134, '40073.57', '2026-07-13', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: ', '2026-07-13 22:02:20'),
 (1324, 122, '8485.61', '2026-07-13', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: ', '2026-07-13 22:02:21'),
@@ -1370,9 +1331,7 @@ INSERT INTO `investment_history` (`id`, `investment_id`, `amount`, `change_date`
 (1375, 9, '104340.06', '2026-07-13', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: ', '2026-07-13 22:11:59'),
 (1376, 11, '81997.40', '2026-07-13', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: ', '2026-07-13 22:12:00'),
 (1377, 20, '41264.21', '2026-07-13', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: ', '2026-07-13 22:12:01'),
-(1378, 30, '22191.06', '2026-07-13', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: ', '2026-07-13 22:12:01');
-
-INSERT INTO `investment_history` (`id`, `investment_id`, `amount`, `change_date`, `change_type`, `notes`, `created_at`) VALUES
+(1378, 30, '22191.06', '2026-07-13', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: ', '2026-07-13 22:12:01'),
 (1379, 19, '44440.53', '2026-07-13', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: ', '2026-07-13 22:12:02'),
 (1380, 12, '62625.04', '2026-07-13', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: ', '2026-07-13 22:12:02'),
 (1381, 8, '38185.21', '2026-07-13', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: ', '2026-07-13 22:12:03'),
@@ -1381,7 +1340,9 @@ INSERT INTO `investment_history` (`id`, `investment_id`, `amount`, `change_date`
 (1384, 3, '54735.27', '2026-07-13', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: ', '2026-07-13 22:12:05'),
 (1385, 26, '28146.54', '2026-07-13', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: ', '2026-07-13 22:12:05'),
 (1386, 27, '18750.94', '2026-07-13', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 2 folios: ', '2026-07-13 22:12:06'),
-(1387, 34, '17987.73', '2026-07-13', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: ', '2026-07-13 22:12:07'),
+(1387, 34, '17987.73', '2026-07-13', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: ', '2026-07-13 22:12:07');
+
+INSERT INTO `investment_history` (`id`, `investment_id`, `amount`, `change_date`, `change_type`, `notes`, `created_at`) VALUES
 (1388, 47, '2605.90', '2026-07-13', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: ', '2026-07-13 22:12:07'),
 (1389, 14, '70573.04', '2026-07-13', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: ', '2026-07-13 22:12:08'),
 (1390, 1, '27728.93', '2026-07-13', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: ', '2026-07-13 22:12:08'),
@@ -1401,7 +1362,11 @@ INSERT INTO `investment_history` (`id`, `investment_id`, `amount`, `change_date`
 (1404, 39, '7526.07', '2026-07-13', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: ', '2026-07-13 22:12:17'),
 (1405, 5, '17988.45', '2026-07-13', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: ', '2026-07-13 22:12:17'),
 (1406, 16, '59406.77', '2026-07-13', 'updated', 'Imported from CSV on 24/01/2026 - Aggregated value from 1 folio: ', '2026-07-13 22:12:18');
+UNLOCK TABLES;
 
+-- Table: investment_transactions (0 rows)
+LOCK TABLES `investment_transactions` WRITE;
+-- No data for table `investment_transactions`
 UNLOCK TABLES;
 
 SET FOREIGN_KEY_CHECKS=1;
