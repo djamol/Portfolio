@@ -200,7 +200,7 @@ export class ImportDataComponent implements OnInit {
           extractedScheme: record.subTypeCategory,
           presentValue: record.presentValue,
           isNewAMC: !typeAmcs.has(record.subTypeName),
-          isNewScheme: !typeSchemes.has(record.subTypeCategory)
+          isNewScheme: !this.categoryExistsInSet(typeSchemes, record.subTypeCategory)
         }));
         
         // Set flags for new indicators in headers
@@ -730,11 +730,45 @@ export class ImportDataComponent implements OnInit {
   }
   
   /**
+   * Dhan names often end with "FoF Fund" while older imports used "FoF".
+   * Treat those as the same category by dropping the redundant trailing Fund.
+   */
+  private canonicalizeFoFCategory(schemeName: string): string {
+    if (!schemeName) return schemeName;
+    return schemeName.replace(/\b(FoF|FOF|fof)\s+Fund\b/g, (_, fof: string) =>
+      fof.toLowerCase() === 'fof' ? 'FoF' : fof
+    ).trim();
+  }
+
+  /** Category name variants that should match the same holding (e.g. FoF vs FoF Fund). */
+  private getCategoryNameVariants(category: string): string[] {
+    if (!category) return [];
+    const trimmed = category.trim();
+    const variants = new Set<string>([trimmed]);
+    const canonical = this.canonicalizeFoFCategory(trimmed);
+    variants.add(canonical);
+    if (/\bFoF$/i.test(canonical)) {
+      variants.add(`${canonical} Fund`);
+    }
+    return Array.from(variants);
+  }
+
+  private categoryExistsInSet(schemes: Set<string>, category: string): boolean {
+    return this.getCategoryNameVariants(category).some(variant => schemes.has(variant));
+  }
+
+  /**
    * Normalize fund categories to group similar fund types
    * This helps in consolidating similar funds like "Mid Cap Fund", "Midcap Fund", "Mid Cap Fund - Regular Plan", etc.
    */
   private normalizeFundCategory(schemeName: string): string {
     if (!schemeName) return schemeName;
+
+    // Dhan App: "Multi Asset Active FoF Fund" === "Multi Asset Active FoF"
+    const withoutFoFFund = this.canonicalizeFoFCategory(schemeName);
+    if (withoutFoFFund !== schemeName) {
+      return this.normalizeFundCategory(withoutFoFFund);
+    }
     
     // Convert to lowercase for comparison
     const lowerSchemeName = schemeName.toLowerCase().trim();
@@ -963,19 +997,21 @@ export class ImportDataComponent implements OnInit {
       this.uploadProgress = Math.floor(((i + 1) / this.parsedData.length) * 100);
 
       try {
-        // Check if investment already exists based on platform, sub-type name, and sub-type category
-        const existingInvestments = await this.investmentService.getByCriteria(
-          this.platform,
-          record.subTypeName,
-          record.subTypeCategory
-        ).toPromise();
-
-        const matchingInvestments = existingInvestments?.filter(
-          inv => inv.investment_type === this.investmentType
-        ) || [];
+        const matchingInvestments = await this.findExistingInvestmentsForRecord(record);
 
         if (matchingInvestments.length > 0) {
-          await this.updateExistingInvestment(matchingInvestments[0], record.presentValue);
+          // Prefer the holding with the highest amount so FoF / FoF Fund duplicates consolidate
+          matchingInvestments.sort((a, b) => (Number(b.amount) || 0) - (Number(a.amount) || 0));
+          const primary = matchingInvestments[0];
+          await this.updateExistingInvestment(primary, record.presentValue, record.subTypeCategory);
+
+          for (const duplicate of matchingInvestments.slice(1)) {
+            try {
+              await this.investmentService.delete(duplicate.id).toPromise();
+            } catch (deleteError) {
+              console.error(`Error deleting duplicate investment ${duplicate.id}:`, deleteError);
+            }
+          }
         } else {
           // Create new investment with the aggregated value
           await this.createInvestment(record);
@@ -986,12 +1022,42 @@ export class ImportDataComponent implements OnInit {
     }
   }
 
-  private async updateExistingInvestment(investment: any, newValue: number) {
+  private async findExistingInvestmentsForRecord(record: any): Promise<any[]> {
+    const seenIds = new Set<string | number>();
+    const matches: any[] = [];
+
+    for (const categoryVariant of this.getCategoryNameVariants(record.subTypeCategory)) {
+      const existingInvestments = await this.investmentService.getByCriteria(
+        this.platform,
+        record.subTypeName,
+        categoryVariant
+      ).toPromise();
+
+      for (const inv of existingInvestments || []) {
+        if (inv.investment_type !== this.investmentType) continue;
+        if (seenIds.has(inv.id)) continue;
+        seenIds.add(inv.id);
+        matches.push(inv);
+      }
+    }
+
+    return matches;
+  }
+
+  private async updateExistingInvestment(
+    investment: any,
+    newValue: number,
+    canonicalCategory?: string,
+    notesOverride?: string
+  ) {
     const updatedInvestment = {
       ...investment,
       amount: newValue,
+      ...(canonicalCategory ? { sub_type_category: canonicalCategory } : {}),
       investment_date: this.getInvestmentDate(),
-      notes: investment.notes || `Updated via import on ${new Date().toLocaleDateString()} - Total aggregated value from CSV`
+      notes: notesOverride
+        || investment.notes
+        || `Updated via import on ${new Date().toLocaleDateString()} - Total aggregated value from CSV`
     };
 
     try {
