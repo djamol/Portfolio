@@ -8,8 +8,24 @@ const { isIgnoredPlatform } = require('./ignore-platform');
 
 function toDateString(value) {
   if (!value) return null;
-  if (value instanceof Date) return value.toISOString().slice(0, 10);
-  return String(value).slice(0, 10);
+  if (value instanceof Date) {
+    // Use local calendar day so IST midnight is not shifted back via toISOString().
+    const y = value.getFullYear();
+    const m = String(value.getMonth() + 1).padStart(2, '0');
+    const d = String(value.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+  const s = String(value).trim();
+  if (/^\d{4}-\d{2}-\d{2}T/.test(s)) {
+    const parsed = new Date(s);
+    if (!Number.isNaN(parsed.getTime())) {
+      const y = parsed.getFullYear();
+      const m = String(parsed.getMonth() + 1).padStart(2, '0');
+      const d = String(parsed.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
+  }
+  return s.slice(0, 10);
 }
 
 function withoutIgnoredPlatforms(investments) {
@@ -55,6 +71,19 @@ function amountAsOf(investmentId, asOfDate, historyRows, investmentsById) {
   if (relevant.length) return Number(relevant[0].amount);
   const inv = investmentsById[investmentId];
   return inv ? Number(inv.amount) : 0;
+}
+
+/** Last history amount on/before date; 0 if none (no live-amount fallback). */
+function amountAsOfHistoryOnly(investmentId, asOfDate, historyRows) {
+  const asOf = toDateString(asOfDate);
+  const relevant = historyRows
+    .filter((h) => h.investment_id === investmentId && toDateString(h.change_date) <= asOf)
+    .sort((a, b) => {
+      const dateCmp = toDateString(b.change_date).localeCompare(toDateString(a.change_date));
+      if (dateCmp !== 0) return dateCmp;
+      return (b.id || 0) - (a.id || 0);
+    });
+  return relevant.length ? Number(relevant[0].amount) : 0;
 }
 
 function groupBy(rows, keyFn, aggFn) {
@@ -406,17 +435,15 @@ async function getInsights(query) {
 
 async function getDelta(fromDate, toDate) {
   const { investments, history } = await loadCoreData();
-  const fromMap = Object.fromEntries(
-    history.filter((h) => toDateString(h.change_date) === toDateString(fromDate)).map((h) => [h.investment_id, Number(h.amount)])
-  );
-  const toMap = Object.fromEntries(
-    history.filter((h) => toDateString(h.change_date) === toDateString(toDate)).map((h) => [h.investment_id, Number(h.amount)])
-  );
+  const fromKey = toDateString(fromDate);
+  const toKey = toDateString(toDate);
 
+  // Carry forward last known history on/before each date (no live-amount fallback),
+  // so new holdings appear as movers and dates align with insights snapshots.
   return withoutIgnoredPlatforms(investments)
     .map((i) => {
-      const amount_from = fromMap[i.id] || 0;
-      const amount_to = toMap[i.id] || 0;
+      const amount_from = amountAsOfHistoryOnly(i.id, fromKey, history);
+      const amount_to = amountAsOfHistoryOnly(i.id, toKey, history);
       return {
         investment_id: i.id,
         website_app_name: i.website_app_name,
@@ -428,7 +455,7 @@ async function getDelta(fromDate, toDate) {
         delta: amount_to - amount_from
       };
     })
-    .filter((r) => r.amount_to !== 0 || r.amount_from !== 0)
+    .filter((r) => r.delta !== 0)
     .sort((a, b) => b.delta - a.delta);
 }
 

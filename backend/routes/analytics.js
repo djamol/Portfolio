@@ -5,6 +5,7 @@ const mongoAnalytics = require('../utils/mongo-analytics');
 const { appendIgnorePlatformClause } = require('../utils/ignore-platform');
 const {
   amountAsOfSubquery,
+  amountAsOfHistorySubquery,
   buildInvestmentFilterClauses,
   buildAmountFilterClauses,
   resolveSeriesBreakdown
@@ -281,7 +282,7 @@ router.get('/value-series', async (req, res) => {
     const [rows] = await pool.query(
       `
       SELECT
-        sd.change_date,
+        DATE_FORMAT(sd.change_date, '%Y-%m-%d') AS change_date,
         ${selectSeries}
         SUM(vals.amount_at_date) AS total_value
       FROM (
@@ -382,11 +383,11 @@ router.get('/insights', async (req, res) => {
     const pool = getPool();
 
     const [[latestRow]] = await pool.query(`
-      SELECT MAX(change_date) AS latest_date
+      SELECT DATE_FORMAT(MAX(change_date), '%Y-%m-%d') AS latest_date
       FROM investment_history
     `);
 
-    const latestDate = latestRow?.latest_date;
+    const latestDate = latestRow?.latest_date || null;
     if (!latestDate) {
       return res.json({
         success: true,
@@ -401,7 +402,7 @@ router.get('/insights', async (req, res) => {
 
     const [[prevRow]] = await pool.query(
       `
-      SELECT MAX(change_date) AS prev_date
+      SELECT DATE_FORMAT(MAX(change_date), '%Y-%m-%d') AS prev_date
       FROM investment_history
       WHERE change_date < ?
       `,
@@ -529,35 +530,24 @@ router.get('/delta', async (req, res) => {
     const whereExtra = ignore.sql
       ? `AND ${ignore.sql.replace(/^WHERE\s+/i, '')}`
       : '';
+    // Amount-as-of from history only (same carry-forward idea as insights; 0 if no history yet).
     const [rows] = await pool.query(
       `
-      WITH a AS (
-        SELECT investment_id, amount
-        FROM investment_history
-        WHERE change_date = ?
-      ),
-      b AS (
-        SELECT investment_id, amount
-        FROM investment_history
-        WHERE change_date = ?
-      )
       SELECT
         i.id AS investment_id,
         i.website_app_name,
         i.investment_type,
         i.sub_type_name,
         i.sub_type_category,
-        COALESCE(b.amount, 0) AS amount_to,
-        COALESCE(a.amount, 0) AS amount_from,
-        COALESCE(b.amount, 0) - COALESCE(a.amount, 0) AS delta
+        ${amountAsOfHistorySubquery('i', '?')} AS amount_to,
+        ${amountAsOfHistorySubquery('i', '?')} AS amount_from,
+        (${amountAsOfHistorySubquery('i', '?')}) - (${amountAsOfHistorySubquery('i', '?')}) AS delta
       FROM investments i
-      LEFT JOIN a ON a.investment_id = i.id
-      LEFT JOIN b ON b.investment_id = i.id
-      WHERE (COALESCE(b.amount, 0) <> 0 OR COALESCE(a.amount, 0) <> 0)
+      WHERE ((${amountAsOfHistorySubquery('i', '?')}) - (${amountAsOfHistorySubquery('i', '?')})) <> 0
       ${whereExtra}
       ORDER BY delta DESC
       `,
-      [fromDate, toDate, ...ignore.params]
+      [toDate, fromDate, toDate, fromDate, toDate, fromDate, ...ignore.params]
     );
 
     res.json({

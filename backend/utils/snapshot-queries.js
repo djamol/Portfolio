@@ -21,6 +21,7 @@ function parseBoolParam(value) {
 
 /**
  * Latest known amount for an investment on or before a snapshot date.
+ * Falls back to the live investments.amount when no history exists yet.
  */
 function amountAsOfSubquery(investmentAlias, asOfDateExpr) {
   return `COALESCE(
@@ -33,6 +34,21 @@ function amountAsOfSubquery(investmentAlias, asOfDateExpr) {
       LIMIT 1
     ),
     ${investmentAlias}.amount
+  )`;
+}
+
+/** History-only as-of amount (0 when no row on/before the date). Used by /delta. */
+function amountAsOfHistorySubquery(investmentAlias, asOfDateExpr) {
+  return `COALESCE(
+    (
+      SELECT ih.amount
+      FROM investment_history ih
+      WHERE ih.investment_id = ${investmentAlias}.id
+        AND ih.change_date <= ${asOfDateExpr}
+      ORDER BY ih.change_date DESC, ih.id DESC
+      LIMIT 1
+    ),
+    0
   )`;
 }
 
@@ -146,6 +162,7 @@ module.exports = {
   parseAnalyticsFilters,
   resolveSeriesBreakdown,
   amountAsOfSubquery,
+  amountAsOfHistorySubquery,
   buildInvestmentFilterClauses,
   buildAmountFilterClauses
 };

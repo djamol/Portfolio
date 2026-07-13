@@ -132,6 +132,10 @@ export class DashboardComponent implements OnInit {
   refresh() {
     this.loading = true;
     this.errorMessage = '';
+    this.deltaFrom = '';
+    this.deltaTo = '';
+    this.topGainers = [];
+    this.topLosers = [];
     let pending = 4;
     const done = () => {
       pending -= 1;
@@ -156,6 +160,14 @@ export class DashboardComponent implements OnInit {
       next: (res) => {
         this.insights = res.data;
         this.daysSinceSnapshot = res.data?.daysSinceLatestSnapshot ?? null;
+        // Prefer insights snapshot pair so movers match "VS PREVIOUS SNAPSHOT".
+        const from = this.dateKey(res.data?.prevDate);
+        const to = this.dateKey(res.data?.latestDate);
+        if (from && to && from !== to) {
+          this.deltaFrom = from;
+          this.deltaTo = to;
+          this.loadMovers();
+        }
         done();
       },
       error: () => done()
@@ -182,9 +194,12 @@ export class DashboardComponent implements OnInit {
     this.analyticsService.getValueSeriesFiltered({ from }).subscribe({
       next: (res) => {
         this.buildSparkline(res.data);
-        this.setupDeltaDates(res.data);
-        if (this.deltaFrom && this.deltaTo) {
-          this.loadMovers();
+        // Fallback only when insights did not supply a snapshot pair.
+        if (!this.deltaFrom || !this.deltaTo) {
+          this.setupDeltaDates(res.data);
+          if (this.deltaFrom && this.deltaTo) {
+            this.loadMovers();
+          }
         }
         done();
       },
@@ -261,7 +276,7 @@ export class DashboardComponent implements OnInit {
   private loadMovers() {
     this.analyticsService.getDelta(this.deltaFrom, this.deltaTo).subscribe({
       next: (res) => {
-        const rows = res.data || [];
+        const rows = (res.data || []).filter((r) => this.toNumber(r.delta) !== 0);
         this.topGainers = [...rows].sort((a, b) => this.toNumber(b.delta) - this.toNumber(a.delta)).slice(0, 5);
         this.topLosers = [...rows].sort((a, b) => this.toNumber(a.delta) - this.toNumber(b.delta)).slice(0, 5);
       },
@@ -317,8 +332,8 @@ export class DashboardComponent implements OnInit {
   }
 
   private setupDeltaDates(payload: ValueSeriesResponse | undefined) {
-    const dates = [...new Set((payload?.rows || []).map((r) => String(r.change_date).slice(0, 10)))]
-      .sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
+    const dates = [...new Set((payload?.rows || []).map((r) => this.dateKey(r.change_date)).filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b));
     if (dates.length >= 2) {
       this.deltaFrom = dates[dates.length - 2];
       this.deltaTo = dates[dates.length - 1];
@@ -326,6 +341,29 @@ export class DashboardComponent implements OnInit {
       this.deltaFrom = dates[0];
       this.deltaTo = dates[0];
     }
+  }
+
+  /** Normalize API dates to YYYY-MM-DD without UTC day-shift (IST-safe). */
+  private dateKey(value: unknown): string {
+    if (value == null || value === '') return '';
+    if (value instanceof Date && !Number.isNaN(value.getTime())) {
+      const y = value.getFullYear();
+      const m = String(value.getMonth() + 1).padStart(2, '0');
+      const d = String(value.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
+    const s = String(value).trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    if (/^\d{4}-\d{2}-\d{2}T/.test(s)) {
+      const d = new Date(s);
+      if (!Number.isNaN(d.getTime())) {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+      }
+    }
+    return s.slice(0, 10);
   }
 
   private buildTaxBuckets() {

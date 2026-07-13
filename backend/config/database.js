@@ -8,6 +8,8 @@ const dbConfig = {
   user: process.env.DB_USER || 'root',
   password: process.env.DB_PASSWORD || '',
   database: process.env.DB_NAME || 'portfolio',
+  // Keep DATE/DATETIME as YYYY-MM-DD strings so IST/UTC never shifts calendar days in JSON.
+  dateStrings: true,
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0

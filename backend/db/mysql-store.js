@@ -85,7 +85,7 @@ async function updateInvestment(id, data) {
     ]
   );
 
-  if (oldInvestment[0].amount !== data.amount) {
+  if (Number(oldInvestment[0].amount) !== Number(data.amount)) {
     await pool.query(
       `INSERT INTO investment_history (investment_id, amount, change_date, change_type, notes)
        VALUES (?, ?, ?, 'updated', ?)`,
