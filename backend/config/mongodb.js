@@ -7,7 +7,9 @@ const COLLECTIONS = [
   'sub_type_categories',
   'investments',
   'investment_history',
-  'investment_transactions'
+  'investment_transactions',
+  'bank_accounts',
+  'bank_transactions'
 ];
 
 const mongoConfig = {
@@ -53,7 +55,13 @@ async function ensureIndexes(database) {
       collection: 'sub_type_categories',
       spec: { category: 1, sub_type_name_id: 1, investment_type: 1 },
       options: { unique: true }
-    }
+    },
+    { collection: 'bank_accounts', spec: { bank_name: 1 } },
+    { collection: 'bank_accounts', spec: { account_number: 1 } },
+    { collection: 'bank_transactions', spec: { account_id: 1, fingerprint: 1 }, options: { unique: true } },
+    { collection: 'bank_transactions', spec: { txn_date: -1 } },
+    { collection: 'bank_transactions', spec: { account_id: 1, txn_date: -1 } },
+    { collection: 'bank_transactions', spec: { category: 1 } }
   ];
 
   for (const { collection, spec, options } of indexSpecs) {

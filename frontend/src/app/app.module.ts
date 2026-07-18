@@ -15,6 +15,7 @@ import { ImportDataComponent } from './components/import-data/import-data.compon
 import { MultiSelectFilterComponent } from './components/multi-select-filter/multi-select-filter.component';
 import { AssetTrackerComponent } from './components/asset-tracker/asset-tracker.component';
 import { DashboardComponent } from './components/dashboard/dashboard.component';
+import { BankingComponent } from './components/banking/banking.component';
 import { routes } from './app.routes';
 
 @NgModule({
@@ -27,7 +28,8 @@ import { routes } from './app.routes';
     ImportDataComponent,
     MultiSelectFilterComponent,
     AssetTrackerComponent,
-    DashboardComponent
+    DashboardComponent,
+    BankingComponent
   ],
   imports: [
     BrowserModule,

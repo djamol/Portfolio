@@ -178,6 +178,54 @@ const createTables = async () => {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
 
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS bank_accounts (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        bank_name VARCHAR(100) NOT NULL,
+        account_name VARCHAR(255) NOT NULL,
+        account_number VARCHAR(64) NULL,
+        ifsc VARCHAR(32) NULL,
+        account_type VARCHAR(64) DEFAULT 'Savings',
+        currency VARCHAR(8) DEFAULT 'INR',
+        opening_balance DECIMAL(15, 2) DEFAULT 0,
+        notes TEXT,
+        is_active TINYINT(1) DEFAULT 1,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_bank_name (bank_name),
+        INDEX idx_account_number (account_number)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS bank_transactions (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        account_id INT NOT NULL,
+        txn_date DATE NOT NULL,
+        value_date DATE NULL,
+        narration TEXT,
+        ref_no VARCHAR(128) NULL,
+        withdrawal DECIMAL(15, 2) NOT NULL DEFAULT 0,
+        deposit DECIMAL(15, 2) NOT NULL DEFAULT 0,
+        balance DECIMAL(15, 2) NULL,
+        category VARCHAR(100) NULL,
+        txn_type VARCHAR(32) NULL,
+        fingerprint CHAR(64) NOT NULL,
+        raw_bank VARCHAR(32) NULL,
+        tags VARCHAR(255) NULL,
+        notes TEXT,
+        import_batch_id VARCHAR(64) NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        FOREIGN KEY (account_id) REFERENCES bank_accounts(id) ON DELETE CASCADE,
+        UNIQUE KEY uq_bank_txn_fingerprint (account_id, fingerprint),
+        INDEX idx_bank_txn_date (txn_date),
+        INDEX idx_bank_txn_account (account_id),
+        INDEX idx_bank_txn_category (category),
+        INDEX idx_bank_txn_type (txn_type)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+
     logger.info('MySQL: tables ready');
   } catch (error) {
     logger.logError('MySQL table creation', error);
