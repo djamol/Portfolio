@@ -6,7 +6,18 @@ import {
   BankTransaction
 } from '../../services/banking.service';
 
-type TabId = 'overview' | 'accounts' | 'import' | 'transactions' | 'analytics';
+type TabId = 'overview' | 'accounts' | 'import' | 'transactions' | 'analytics' | 'cashflow' | 'interest';
+type DatePreset = '1m' | '3m' | '6m' | 'ytd' | '1y' | 'all' | 'custom';
+type PeriodGrain = 'month' | 'quarter' | 'year';
+
+type PeriodRow = {
+  key: string;
+  label: string;
+  total_debit: number;
+  total_credit: number;
+  net: number;
+  txn_count: number;
+};
 
 @Component({
   selector: 'app-banking',
@@ -17,30 +28,35 @@ type TabId = 'overview' | 'accounts' | 'import' | 'transactions' | 'analytics';
 export class BankingComponent implements OnInit {
   activeTab: TabId = 'overview';
   loading = false;
+  txnLoading = false;
   message = '';
   messageType: 'success' | 'error' | 'info' = 'info';
 
   accounts: BankAccount[] = [];
   transactions: BankTransaction[] = [];
   txnTotal = 0;
+  txnTotals = { total_debit: 0, total_credit: 0, net_cashflow: 0 };
   categories: string[] = [];
   analytics: any = null;
 
-  // filters
   filterAccountId: number | '' = '';
   filterFrom = '';
   filterTo = '';
   filterCategory = '';
   filterFlow = '';
   filterQ = '';
-  filterLimit = 100;
+  filterMinAmount: number | '' = '';
+  filterSort = 'date_desc';
+  filterLimit = Number(localStorage.getItem('bank-txn-page-size') || 100) || 100;
+  filterOffset = 0;
+  datePreset: DatePreset = 'all';
+  jumpPage: number | null = null;
+  private flashTimer: ReturnType<typeof setTimeout> | null = null;
 
-  // account form
   showAccountForm = false;
   editingAccount: BankAccount | null = null;
   accountForm: Partial<BankAccount> = this.emptyAccountForm();
 
-  // import
   importAccountId: number | '' = '';
   importBankHint = '';
   importFile: File | null = null;
@@ -48,13 +64,29 @@ export class BankingComponent implements OnInit {
   importing = false;
   lastImportResult: any = null;
 
-  // selection / categorize
   selectedIds = new Set<number>();
   bulkCategory = '';
+  expandedTxnId: number | null = null;
+  exporting = false;
 
   categoryChartData: ChartConfiguration<'doughnut'>['data'] = { labels: [], datasets: [] };
+  expenseChartData: ChartConfiguration<'doughnut'>['data'] = { labels: [], datasets: [] };
   monthlyChartData: ChartConfiguration<'bar'>['data'] = { labels: [], datasets: [] };
+  periodChartData: ChartConfiguration<'bar'>['data'] = { labels: [], datasets: [] };
+  periodNetChartData: ChartConfiguration<'line'>['data'] = { labels: [], datasets: [] };
+  interestChartData: ChartConfiguration<'bar'>['data'] = { labels: [], datasets: [] };
+  netChartData: ChartConfiguration<'line'>['data'] = { labels: [], datasets: [] };
   balanceChartData: ChartConfiguration<'line'>['data'] = { labels: [], datasets: [] };
+
+  cashflowGrain: PeriodGrain = 'month';
+  periodRows: PeriodRow[] = [];
+  periodBest: PeriodRow | null = null;
+  periodWorst: PeriodRow | null = null;
+
+  chartColors = [
+    '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6',
+    '#06b6d4', '#ec4899', '#22c55e', '#a855f7', '#64748b'
+  ];
 
   doughnutOptions: ChartOptions<'doughnut'> = {
     responsive: true,
@@ -94,7 +126,55 @@ export class BankingComponent implements OnInit {
     }
   };
 
+  netLineOptions: ChartOptions<'line'> = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { display: true, position: 'top' } },
+    scales: {
+      y: {
+        ticks: { callback: (v) => '₹' + Number(v).toLocaleString('en-IN') }
+      }
+    }
+  };
+
   readonly bankOptions = ['HDFC', 'ICICI', 'SBI', 'Axis', 'Kotak', 'Other'];
+  readonly pageSizeOptions = [50, 100, 200, 500];
+  readonly sortOptions = [
+    { value: 'date_desc', label: 'Newest first' },
+    { value: 'date_asc', label: 'Oldest first' },
+    { value: 'debit_desc', label: 'Largest debit' },
+    { value: 'debit_asc', label: 'Smallest debit' },
+    { value: 'credit_desc', label: 'Largest credit' },
+    { value: 'credit_asc', label: 'Smallest credit' },
+    { value: 'amount_desc', label: 'Largest amount' },
+    { value: 'amount_asc', label: 'Smallest amount' },
+    { value: 'balance_desc', label: 'Balance high → low' },
+    { value: 'balance_asc', label: 'Balance low → high' },
+    { value: 'account_asc', label: 'Account A→Z' },
+    { value: 'account_desc', label: 'Account Z→A' },
+    { value: 'category_asc', label: 'Category A→Z' },
+    { value: 'category_desc', label: 'Category Z→A' },
+    { value: 'narration_asc', label: 'Narration A→Z' },
+    { value: 'narration_desc', label: 'Narration Z→A' }
+  ];
+  readonly sortableColumns: Array<{ key: string; label: string; class?: string }> = [
+    { key: 'date', label: 'Date' },
+    { key: 'account', label: 'Account' },
+    { key: 'narration', label: 'Narration' },
+    { key: 'withdrawal', label: 'Withdrawal', class: 'num' },
+    { key: 'deposit', label: 'Deposit', class: 'num' },
+    { key: 'balance', label: 'Balance', class: 'num' },
+    { key: 'category', label: 'Category' }
+  ];
+  private readonly columnSortKey: Record<string, string> = {
+    date: 'date',
+    account: 'account',
+    narration: 'narration',
+    withdrawal: 'debit',
+    deposit: 'credit',
+    balance: 'balance',
+    category: 'category'
+  };
   readonly defaultCategories = [
     'Interest Income',
     'TDS / Tax',
@@ -123,6 +203,45 @@ export class BankingComponent implements OnInit {
     this.refreshAll();
   }
 
+  get currentPage(): number {
+    return Math.floor(this.filterOffset / this.filterLimit) + 1;
+  }
+
+  get totalPages(): number {
+    return Math.max(1, Math.ceil(this.txnTotal / this.filterLimit));
+  }
+
+  get pageFrom(): number {
+    if (!this.txnTotal) return 0;
+    return this.filterOffset + 1;
+  }
+
+  get pageTo(): number {
+    return Math.min(this.filterOffset + this.transactions.length, this.txnTotal);
+  }
+
+  get sortColumn(): string {
+    const base = this.filterSort.replace(/_(asc|desc)$/, '');
+    if (base === 'debit') return 'withdrawal';
+    if (base === 'credit') return 'deposit';
+    return base || 'date';
+  }
+
+  get sortDir(): 'asc' | 'desc' {
+    return this.filterSort.endsWith('_asc') ? 'asc' : 'desc';
+  }
+
+  get selectedSummary(): { count: number; debit: number; credit: number } {
+    let debit = 0;
+    let credit = 0;
+    for (const t of this.transactions) {
+      if (!this.selectedIds.has(t.id)) continue;
+      debit += Number(t.withdrawal) || 0;
+      credit += Number(t.deposit) || 0;
+    }
+    return { count: this.selectedIds.size, debit, credit };
+  }
+
   emptyAccountForm(): Partial<BankAccount> {
     return {
       bank_name: 'HDFC',
@@ -140,7 +259,9 @@ export class BankingComponent implements OnInit {
   setTab(tab: TabId) {
     this.activeTab = tab;
     if (tab === 'transactions') this.loadTransactions();
-    if (tab === 'analytics' || tab === 'overview') this.loadAnalytics();
+    if (tab === 'analytics' || tab === 'overview' || tab === 'cashflow' || tab === 'interest') {
+      this.loadAnalytics();
+    }
   }
 
   refreshAll() {
@@ -173,12 +294,14 @@ export class BankingComponent implements OnInit {
     });
 
     this.loadAnalytics(done);
+    if (this.activeTab === 'transactions') this.loadTransactions();
   }
 
-  loadTransactions(done?: () => void) {
+  private buildTxnFilters(forExport = false): Record<string, any> {
     const filters: Record<string, any> = {
-      limit: this.filterLimit,
-      offset: 0
+      limit: forExport ? 5000 : this.filterLimit,
+      offset: forExport ? 0 : this.filterOffset,
+      sort: this.filterSort
     };
     if (this.filterAccountId) filters['account_id'] = this.filterAccountId;
     if (this.filterFrom) filters['from'] = this.filterFrom;
@@ -186,15 +309,28 @@ export class BankingComponent implements OnInit {
     if (this.filterCategory) filters['category'] = this.filterCategory;
     if (this.filterFlow) filters['flow'] = this.filterFlow;
     if (this.filterQ) filters['q'] = this.filterQ;
+    if (this.filterMinAmount) filters['min_amount'] = this.filterMinAmount;
+    return filters;
+  }
 
-    this.bankingService.getTransactions(filters).subscribe({
+  loadTransactions(done?: () => void) {
+    this.txnLoading = true;
+    this.bankingService.getTransactions(this.buildTxnFilters()).subscribe({
       next: (res) => {
         this.transactions = res.rows;
         this.txnTotal = res.total;
+        this.txnTotals = {
+          total_debit: Number(res.total_debit) || 0,
+          total_credit: Number(res.total_credit) || 0,
+          net_cashflow: Number(res.net_cashflow) || 0
+        };
         this.selectedIds.clear();
+        this.expandedTxnId = null;
+        this.txnLoading = false;
         done?.();
       },
       error: (err) => {
+        this.txnLoading = false;
         this.flash('error', err.message || 'Failed to load transactions');
         done?.();
       }
@@ -231,32 +367,51 @@ export class BankingComponent implements OnInit {
       labels: cats.map((c: any) => c.category),
       datasets: [{
         data: cats.map((c: any) => Number(c.total_debit) + Number(c.total_credit)),
-        backgroundColor: [
-          '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6',
-          '#06b6d4', '#ec4899', '#22c55e', '#a855f7', '#64748b'
-        ]
+        backgroundColor: this.chartColors
+      }]
+    };
+
+    const expenseCats = (this.analytics.expenseByCategory || cats.filter((c: any) => Number(c.total_debit) > 0)).slice(0, 10);
+    this.expenseChartData = {
+      labels: expenseCats.map((c: any) => c.category),
+      datasets: [{
+        data: expenseCats.map((c: any) => Number(c.total_debit)),
+        backgroundColor: this.chartColors
       }]
     };
 
     const months = this.analytics.byMonth || [];
+    const recentMonths = months.slice(-24);
     this.monthlyChartData = {
-      labels: months.map((m: any) => m.month),
+      labels: recentMonths.map((m: any) => m.month),
       datasets: [
         {
           label: 'Credits',
-          data: months.map((m: any) => Number(m.total_credit)),
+          data: recentMonths.map((m: any) => Number(m.total_credit)),
           backgroundColor: 'rgba(16, 185, 129, 0.75)'
         },
         {
           label: 'Debits',
-          data: months.map((m: any) => Number(m.total_debit)),
+          data: recentMonths.map((m: any) => Number(m.total_debit)),
           backgroundColor: 'rgba(239, 68, 68, 0.75)'
         }
       ]
     };
 
-    // Keep balance chart readable: sample last ~120 points
-    const series = (this.analytics.balanceSeries || []).slice(-120);
+    this.netChartData = {
+      labels: recentMonths.map((m: any) => m.month),
+      datasets: [{
+        label: 'Net cashflow',
+        data: recentMonths.map((m: any) => Number(m.net)),
+        borderColor: '#0f172a',
+        backgroundColor: 'rgba(15,23,42,0.08)',
+        fill: true,
+        tension: 0.25,
+        pointRadius: 2
+      }]
+    };
+
+    const series = (this.analytics.balanceSeries || []).slice(-180);
     this.balanceChartData = {
       labels: series.map((p: any) => p.date),
       datasets: [{
@@ -268,10 +423,187 @@ export class BankingComponent implements OnInit {
         pointRadius: 0
       }]
     };
+
+    this.buildPeriodCharts();
+    this.buildInterestCharts();
+  }
+
+  setCashflowGrain(grain: PeriodGrain) {
+    this.cashflowGrain = grain;
+    this.buildPeriodCharts();
+  }
+
+  buildPeriodCharts() {
+    const months = this.analytics?.byMonth || [];
+    this.periodRows = this.aggregatePeriods(months, this.cashflowGrain);
+
+    this.periodChartData = {
+      labels: this.periodRows.map((r) => r.label),
+      datasets: [
+        {
+          label: 'Credits',
+          data: this.periodRows.map((r) => r.total_credit),
+          backgroundColor: 'rgba(16, 185, 129, 0.8)'
+        },
+        {
+          label: 'Debits',
+          data: this.periodRows.map((r) => r.total_debit),
+          backgroundColor: 'rgba(239, 68, 68, 0.8)'
+        }
+      ]
+    };
+
+    this.periodNetChartData = {
+      labels: this.periodRows.map((r) => r.label),
+      datasets: [{
+        label: 'Net',
+        data: this.periodRows.map((r) => r.net),
+        borderColor: '#2563eb',
+        backgroundColor: 'rgba(37,99,235,0.12)',
+        fill: true,
+        tension: 0.25,
+        pointRadius: 3
+      }]
+    };
+
+    if (this.periodRows.length) {
+      this.periodBest = [...this.periodRows].sort((a, b) => b.net - a.net)[0];
+      this.periodWorst = [...this.periodRows].sort((a, b) => a.net - b.net)[0];
+    } else {
+      this.periodBest = null;
+      this.periodWorst = null;
+    }
+  }
+
+  buildInterestCharts() {
+    const rows = this.analytics?.interestByMonth || [];
+    this.interestChartData = {
+      labels: rows.map((r: any) => r.month),
+      datasets: [
+        {
+          label: 'Interest earned',
+          data: rows.map((r: any) => Number(r.interest) || 0),
+          backgroundColor: 'rgba(16, 185, 129, 0.8)'
+        },
+        {
+          label: 'TDS / tax',
+          data: rows.map((r: any) => Number(r.tax) || 0),
+          backgroundColor: 'rgba(245, 158, 11, 0.85)'
+        },
+        {
+          label: 'FD booked',
+          data: rows.map((r: any) => Number(r.fd_booked) || 0),
+          backgroundColor: 'rgba(99, 102, 241, 0.8)'
+        }
+      ]
+    };
+  }
+
+  aggregatePeriods(months: any[], grain: PeriodGrain): PeriodRow[] {
+    if (!months?.length) return [];
+
+    if (grain === 'month') {
+      return months.map((m: any) => ({
+        key: m.month,
+        label: m.month,
+        total_debit: Number(m.total_debit) || 0,
+        total_credit: Number(m.total_credit) || 0,
+        net: Number(m.net) || 0,
+        txn_count: Number(m.txn_count) || 0
+      }));
+    }
+
+    const map = new Map<string, PeriodRow>();
+    for (const m of months) {
+      const ym = String(m.month || '');
+      const [y, mo] = ym.split('-').map(Number);
+      if (!y || !mo) continue;
+
+      let key = '';
+      let label = '';
+      if (grain === 'year') {
+        key = String(y);
+        label = String(y);
+      } else {
+        const q = Math.ceil(mo / 3);
+        key = `${y}-Q${q}`;
+        label = `${y} Q${q}`;
+      }
+
+      const row = map.get(key) || {
+        key,
+        label,
+        total_debit: 0,
+        total_credit: 0,
+        net: 0,
+        txn_count: 0
+      };
+      row.total_debit += Number(m.total_debit) || 0;
+      row.total_credit += Number(m.total_credit) || 0;
+      row.net += Number(m.net) || 0;
+      row.txn_count += Number(m.txn_count) || 0;
+      map.set(key, row);
+    }
+
+    return [...map.values()].sort((a, b) => a.key.localeCompare(b.key));
+  }
+
+  openPeriodInTransactions(row: PeriodRow) {
+    if (this.cashflowGrain === 'month') {
+      this.filterFrom = `${row.key}-01`;
+      const [y, m] = row.key.split('-').map(Number);
+      const last = new Date(y, m, 0);
+      this.filterTo = this.toIsoDate(last);
+    } else if (this.cashflowGrain === 'quarter') {
+      const [yPart, qPart] = row.key.split('-Q');
+      const y = Number(yPart);
+      const q = Number(qPart);
+      const startMonth = (q - 1) * 3;
+      this.filterFrom = this.toIsoDate(new Date(y, startMonth, 1));
+      this.filterTo = this.toIsoDate(new Date(y, startMonth + 3, 0));
+    } else {
+      const y = Number(row.key);
+      this.filterFrom = `${y}-01-01`;
+      this.filterTo = `${y}-12-31`;
+    }
+    this.datePreset = 'custom';
+    this.filterOffset = 0;
+    this.activeTab = 'transactions';
+    this.loadTransactions();
+    this.flash('info', `Showing transactions for ${row.label}`);
+  }
+
+  applyDatePreset(preset: DatePreset) {
+    this.datePreset = preset;
+    if (preset === 'all') {
+      this.filterFrom = '';
+      this.filterTo = '';
+    } else if (preset === 'custom') {
+      return;
+    } else {
+      const to = new Date();
+      const from = new Date();
+      if (preset === '1m') from.setMonth(from.getMonth() - 1);
+      if (preset === '3m') from.setMonth(from.getMonth() - 3);
+      if (preset === '6m') from.setMonth(from.getMonth() - 6);
+      if (preset === '1y') from.setFullYear(from.getFullYear() - 1);
+      if (preset === 'ytd') {
+        from.setMonth(0, 1);
+      }
+      this.filterFrom = this.toIsoDate(from);
+      this.filterTo = this.toIsoDate(to);
+    }
+    this.filterOffset = 0;
+    this.applyFilters();
+  }
+
+  onManualDateChange() {
+    this.datePreset = 'custom';
   }
 
   applyFilters() {
-    this.loadTransactions();
+    this.filterOffset = 0;
+    if (this.activeTab === 'transactions') this.loadTransactions();
     this.loadAnalytics();
   }
 
@@ -282,7 +614,170 @@ export class BankingComponent implements OnInit {
     this.filterCategory = '';
     this.filterFlow = '';
     this.filterQ = '';
+    this.filterMinAmount = '';
+    this.filterSort = 'date_desc';
+    this.filterOffset = 0;
+    this.datePreset = 'all';
     this.applyFilters();
+  }
+
+  goToPage(page: number) {
+    const p = Math.min(Math.max(1, page), this.totalPages);
+    this.filterOffset = (p - 1) * this.filterLimit;
+    this.loadTransactions();
+  }
+
+  nextPage() {
+    if (this.currentPage < this.totalPages) this.goToPage(this.currentPage + 1);
+  }
+
+  prevPage() {
+    if (this.currentPage > 1) this.goToPage(this.currentPage - 1);
+  }
+
+  changePageSize() {
+    this.filterOffset = 0;
+    localStorage.setItem('bank-txn-page-size', String(this.filterLimit));
+    this.loadTransactions();
+  }
+
+  changeSort() {
+    this.filterOffset = 0;
+    this.loadTransactions();
+  }
+
+  sortByColumn(column: string) {
+    const key = this.columnSortKey[column] || column;
+    if (this.sortColumn === column) {
+      this.filterSort = `${key}_${this.sortDir === 'asc' ? 'desc' : 'asc'}`;
+    } else {
+      // Sensible default: newest/largest first for numeric+date, A→Z for text
+      const defaultDesc = column === 'date' || column === 'withdrawal' || column === 'deposit' || column === 'balance';
+      this.filterSort = `${key}_${defaultDesc ? 'desc' : 'asc'}`;
+    }
+    this.filterOffset = 0;
+    this.loadTransactions();
+  }
+
+  sortIndicator(column: string): string {
+    if (this.sortColumn !== column) return '↕';
+    return this.sortDir === 'asc' ? '▲' : '▼';
+  }
+
+  isSorted(column: string): boolean {
+    return this.sortColumn === column;
+  }
+
+  jumpToPage() {
+    if (!this.jumpPage) return;
+    this.goToPage(Number(this.jumpPage));
+  }
+
+  quickFilter(kind: 'uncategorized' | 'interest' | 'debit' | 'credit' | 'clear') {
+    if (kind === 'clear') {
+      this.filterCategory = '';
+      this.filterFlow = '';
+      this.filterQ = '';
+    } else if (kind === 'uncategorized') {
+      this.filterCategory = 'Uncategorized';
+      this.filterFlow = '';
+    } else if (kind === 'interest') {
+      this.filterCategory = 'Interest Income';
+      this.filterFlow = '';
+    } else if (kind === 'debit') {
+      this.filterFlow = 'debit';
+      this.filterCategory = '';
+    } else if (kind === 'credit') {
+      this.filterFlow = 'credit';
+      this.filterCategory = '';
+    }
+    this.filterOffset = 0;
+    if (kind !== 'clear') {
+      this.activeTab = 'transactions';
+    }
+    this.applyFilters();
+  }
+
+  filterByCategory(category: string) {
+    this.filterCategory = category;
+    this.filterOffset = 0;
+    this.activeTab = 'transactions';
+    this.loadTransactions();
+    this.flash('info', `Filtered transactions by category: ${category}`);
+  }
+
+  bulkDelete() {
+    if (!this.selectedIds.size) return;
+    if (!confirm(`Delete ${this.selectedIds.size} selected transactions?`)) return;
+    const ids = [...this.selectedIds];
+    let done = 0;
+    let failed = 0;
+    ids.forEach((id) => {
+      this.bankingService.deleteTransaction(id).subscribe({
+        next: () => {
+          done += 1;
+          if (done + failed === ids.length) {
+            this.flash(failed ? 'error' : 'success', `Deleted ${done}${failed ? `, failed ${failed}` : ''}`);
+            this.loadTransactions();
+            this.loadAnalytics();
+          }
+        },
+        error: () => {
+          failed += 1;
+          if (done + failed === ids.length) {
+            this.flash('error', `Deleted ${done}, failed ${failed}`);
+            this.loadTransactions();
+            this.loadAnalytics();
+          }
+        }
+      });
+    });
+  }
+
+  toggleExpand(id: number) {
+    this.expandedTxnId = this.expandedTxnId === id ? null : id;
+  }
+
+  exportCsv() {
+    this.exporting = true;
+    this.bankingService.getTransactions(this.buildTxnFilters(true)).subscribe({
+      next: (res) => {
+        const rows = res.rows;
+        const header = ['Date', 'Account', 'Narration', 'Ref', 'Withdrawal', 'Deposit', 'Balance', 'Category', 'Type'];
+        const lines = [header.join(',')];
+        for (const t of rows) {
+          lines.push([
+            t.txn_date,
+            `${t.bank_name || ''} ${t.account_name || ''}`.trim(),
+            this.csvEscape(t.narration || ''),
+            this.csvEscape(t.ref_no || ''),
+            t.withdrawal || 0,
+            t.deposit || 0,
+            t.balance ?? '',
+            this.csvEscape(t.category || ''),
+            t.txn_type || ''
+          ].join(','));
+        }
+        const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `bank-transactions-${this.toIsoDate(new Date())}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+        this.exporting = false;
+        this.flash('success', `Exported ${rows.length} transactions (max 5000)`);
+      },
+      error: (err) => {
+        this.exporting = false;
+        this.flash('error', err.message || 'Export failed');
+      }
+    });
+  }
+
+  csvEscape(value: string): string {
+    const v = String(value).replace(/"/g, '""');
+    return `"${v}"`;
   }
 
   openCreateAccount() {
@@ -361,7 +856,7 @@ export class BankingComponent implements OnInit {
         },
         error: (err) => {
           this.importing = false;
-          this.flash('error', err.message || 'Preview failed');
+          this.flash('error', err.error?.error || err.message || 'Preview failed');
         }
       });
   }
@@ -387,7 +882,7 @@ export class BankingComponent implements OnInit {
       },
       error: (err) => {
         this.importing = false;
-        this.flash('error', err.message || 'Import failed');
+        this.flash('error', err.error?.error || err.message || 'Import failed');
       }
     });
   }
@@ -459,9 +954,20 @@ export class BankingComponent implements OnInit {
     return n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
 
+  formatPct(value: any): string {
+    if (value === null || value === undefined || Number.isNaN(Number(value))) return '—';
+    const n = Number(value);
+    const sign = n > 0 ? '+' : '';
+    return `${sign}${n.toFixed(1)}%`;
+  }
+
   flash(type: 'success' | 'error' | 'info', text: string) {
     this.messageType = type;
     this.message = text;
+    if (this.flashTimer) clearTimeout(this.flashTimer);
+    this.flashTimer = setTimeout(() => {
+      this.message = '';
+    }, 6000);
   }
 
   maskAccount(num?: string | null): string {
@@ -469,5 +975,18 @@ export class BankingComponent implements OnInit {
     const s = String(num);
     if (s.length <= 4) return s;
     return '••••' + s.slice(-4);
+  }
+
+  toIsoDate(d: Date): string {
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  categoryPct(amount: number): number {
+    const total = Number(this.analytics?.summary?.total_debit) || 0;
+    if (!total) return 0;
+    return (Number(amount) / total) * 100;
   }
 }

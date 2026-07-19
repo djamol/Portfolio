@@ -60,7 +60,18 @@ router.delete('/accounts/:id', async (req, res) => {
 router.get('/transactions', async (req, res) => {
   try {
     const result = await banking.getTransactions(req.query);
-    res.json({ success: true, data: result.rows, meta: { total: result.total, limit: result.limit, offset: result.offset } });
+    res.json({
+      success: true,
+      data: result.rows,
+      meta: {
+        total: result.total,
+        limit: result.limit,
+        offset: result.offset,
+        total_debit: result.total_debit,
+        total_credit: result.total_credit,
+        net_cashflow: result.net_cashflow
+      }
+    });
   } catch (error) {
     console.error('Error fetching bank transactions:', error);
     res.status(500).json({ success: false, error: error.message });

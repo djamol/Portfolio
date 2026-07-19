@@ -167,22 +167,57 @@ function buildTxnWhere(filters = {}) {
 async function mysqlGetTransactions(filters = {}) {
   const pool = getPool();
   const { whereSql, params } = buildTxnWhere(filters);
-  const limit = Math.min(Number(filters.limit) || 200, 2000);
+  const limit = Math.min(Number(filters.limit) || 100, 5000);
   const offset = Math.max(Number(filters.offset) || 0, 0);
+  const sort = String(filters.sort || 'date_desc');
+  const orderMap = {
+    date_desc: 't.txn_date DESC, t.id DESC',
+    date_asc: 't.txn_date ASC, t.id ASC',
+    account_asc: 'a.bank_name ASC, a.account_name ASC, t.txn_date DESC',
+    account_desc: 'a.bank_name DESC, a.account_name DESC, t.txn_date DESC',
+    narration_asc: 't.narration ASC, t.txn_date DESC',
+    narration_desc: 't.narration DESC, t.txn_date DESC',
+    debit_asc: 't.withdrawal ASC, t.txn_date DESC',
+    debit_desc: 't.withdrawal DESC, t.txn_date DESC',
+    credit_asc: 't.deposit ASC, t.txn_date DESC',
+    credit_desc: 't.deposit DESC, t.txn_date DESC',
+    balance_asc: 't.balance ASC, t.txn_date DESC',
+    balance_desc: 't.balance DESC, t.txn_date DESC',
+    category_asc: 't.category ASC, t.txn_date DESC',
+    category_desc: 't.category DESC, t.txn_date DESC',
+    amount_asc: 'GREATEST(t.withdrawal, t.deposit) ASC, t.txn_date DESC',
+    amount_desc: 'GREATEST(t.withdrawal, t.deposit) DESC, t.txn_date DESC'
+  };
+  const orderBy = orderMap[sort] || orderMap.date_desc;
+
   const [rows] = await pool.query(
     `SELECT t.*, a.bank_name, a.account_name, a.account_number
      FROM bank_transactions t
      JOIN bank_accounts a ON a.id = t.account_id
      WHERE ${whereSql}
-     ORDER BY t.txn_date DESC, t.id DESC
+     ORDER BY ${orderBy}
      LIMIT ? OFFSET ?`,
     [...params, limit, offset]
   );
   const [countRows] = await pool.query(
-    `SELECT COUNT(*) AS total FROM bank_transactions WHERE ${whereSql}`,
+    `SELECT
+      COUNT(*) AS total,
+      COALESCE(SUM(withdrawal),0) AS total_debit,
+      COALESCE(SUM(deposit),0) AS total_credit,
+      COALESCE(SUM(deposit) - SUM(withdrawal),0) AS net_cashflow
+     FROM bank_transactions WHERE ${whereSql}`,
     params
   );
-  return { rows, total: countRows[0].total, limit, offset };
+  const totals = countRows[0];
+  return {
+    rows,
+    total: totals.total,
+    total_debit: totals.total_debit,
+    total_credit: totals.total_credit,
+    net_cashflow: totals.net_cashflow,
+    limit,
+    offset
+  };
 }
 
 async function mysqlUpdateTransaction(id, data) {
@@ -281,12 +316,41 @@ async function mysqlGetAnalytics(filters = {}) {
     params
   );
 
+  const [interestByMonth] = await pool.query(
+    `SELECT DATE_FORMAT(txn_date, '%Y-%m') AS month,
+            COALESCE(SUM(CASE WHEN category = 'Interest Income' OR txn_type = 'interest' THEN deposit ELSE 0 END),0) AS interest,
+            COALESCE(SUM(CASE WHEN category = 'TDS / Tax' OR txn_type = 'tax' THEN withdrawal ELSE 0 END),0) AS tax,
+            COALESCE(SUM(CASE WHEN category = 'Fixed Deposit' OR txn_type = 'fd_book' THEN withdrawal ELSE 0 END),0) AS fd_booked
+     FROM bank_transactions
+     WHERE ${whereSql}
+     GROUP BY DATE_FORMAT(txn_date, '%Y-%m')
+     HAVING interest > 0 OR tax > 0 OR fd_booked > 0
+     ORDER BY month ASC`,
+    params
+  );
+
   const [topExpenses] = await pool.query(
     `SELECT id, txn_date, narration, withdrawal, deposit, category, account_id
      FROM bank_transactions
      WHERE ${whereSql} AND withdrawal > 0
      ORDER BY withdrawal DESC
      LIMIT 15`,
+    params
+  );
+
+  const [topCredits] = await pool.query(
+    `SELECT id, txn_date, narration, withdrawal, deposit, category, account_id
+     FROM bank_transactions
+     WHERE ${whereSql} AND deposit > 0
+     ORDER BY deposit DESC
+     LIMIT 15`,
+    params
+  );
+
+  const [uncatRows] = await pool.query(
+    `SELECT COUNT(*) AS cnt FROM bank_transactions
+     WHERE ${whereSql} AND (category IS NULL OR category = '' OR category = 'Uncategorized'
+       OR category IN ('Expense / Debit', 'Income / Credit'))`,
     params
   );
 
@@ -341,15 +405,108 @@ async function mysqlGetAnalytics(filters = {}) {
     `SELECT DISTINCT category FROM bank_transactions WHERE category IS NOT NULL AND category <> '' ORDER BY category`
   );
 
+  const summary = summaryRows[0];
+  const extras = buildAnalyticsExtras(summary, byMonth, byCategory, uncatRows[0]?.cnt || 0);
+
   return {
-    summary: summaryRows[0],
+    summary: { ...summary, ...extras.summaryExtras },
     byCategory,
+    expenseByCategory: extras.expenseByCategory,
     byMonth,
+    interestByMonth,
     topExpenses,
+    topCredits,
     interestTax: interestTax[0],
     balanceSeries,
     byAccount,
+    insights: extras.insights,
+    mom: extras.mom,
     categories: categories.map((c) => c.category)
+  };
+}
+
+function buildAnalyticsExtras(summary, byMonth, byCategory, uncategorizedCount) {
+  const totalDebit = num(summary?.total_debit);
+  const totalCredit = num(summary?.total_credit);
+  const net = num(summary?.net_cashflow);
+  const txnCount = num(summary?.txn_count);
+  const months = Array.isArray(byMonth) ? byMonth : [];
+  const monthCount = Math.max(months.length, 1);
+  const avgMonthlyDebit = totalDebit / monthCount;
+  const avgMonthlyCredit = totalCredit / monthCount;
+  const savingsRate = totalCredit > 0 ? (net / totalCredit) * 100 : 0;
+
+  const expenseByCategory = (byCategory || [])
+    .map((c) => ({
+      category: c.category,
+      txn_count: c.txn_count,
+      total_debit: num(c.total_debit),
+      total_credit: num(c.total_credit)
+    }))
+    .filter((c) => c.total_debit > 0)
+    .sort((a, b) => b.total_debit - a.total_debit);
+
+  const last = months[months.length - 1];
+  const prev = months[months.length - 2];
+  const mom = last
+    ? {
+        current_month: last.month,
+        current_debit: num(last.total_debit),
+        current_credit: num(last.total_credit),
+        current_net: num(last.net),
+        previous_month: prev?.month || null,
+        previous_debit: prev ? num(prev.total_debit) : null,
+        previous_credit: prev ? num(prev.total_credit) : null,
+        previous_net: prev ? num(prev.net) : null,
+        debit_change_pct:
+          prev && num(prev.total_debit) > 0
+            ? ((num(last.total_debit) - num(prev.total_debit)) / num(prev.total_debit)) * 100
+            : null,
+        credit_change_pct:
+          prev && num(prev.total_credit) > 0
+            ? ((num(last.total_credit) - num(prev.total_credit)) / num(prev.total_credit)) * 100
+            : null
+      }
+    : null;
+
+  const insights = [];
+  if (txnCount > 0) {
+    insights.push(`${txnCount.toLocaleString('en-IN')} transactions in selected range`);
+  }
+  if (totalCredit > 0) {
+    insights.push(`Savings rate ${savingsRate.toFixed(1)}% (net ÷ credits)`);
+  }
+  if (months.length) {
+    insights.push(
+      `Avg monthly spend ₹${avgMonthlyDebit.toLocaleString('en-IN', { maximumFractionDigits: 0 })} · avg credit ₹${avgMonthlyCredit.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
+    );
+  }
+  if (mom?.debit_change_pct != null) {
+    const dir = mom.debit_change_pct >= 0 ? 'up' : 'down';
+    insights.push(
+      `Debits ${dir} ${Math.abs(mom.debit_change_pct).toFixed(1)}% vs ${mom.previous_month}`
+    );
+  }
+  if (uncategorizedCount > 0) {
+    insights.push(`${uncategorizedCount.toLocaleString('en-IN')} transactions need better categorization`);
+  }
+  if (expenseByCategory[0]) {
+    insights.push(
+      `Top spend category: ${expenseByCategory[0].category} (₹${expenseByCategory[0].total_debit.toLocaleString('en-IN', { maximumFractionDigits: 0 })})`
+    );
+  }
+
+  return {
+    summaryExtras: {
+      avg_monthly_debit: avgMonthlyDebit,
+      avg_monthly_credit: avgMonthlyCredit,
+      savings_rate: savingsRate,
+      uncategorized_count: uncategorizedCount,
+      month_count: months.length
+    },
+    expenseByCategory,
+    mom,
+    insights
   };
 }
 
@@ -539,13 +696,49 @@ function mongoTxnQuery(filters = {}) {
 async function mongoGetTransactions(filters = {}) {
   const db = getMongoDb();
   const query = mongoTxnQuery(filters);
-  const limit = Math.min(Number(filters.limit) || 200, 2000);
+  const limit = Math.min(Number(filters.limit) || 100, 5000);
   const offset = Math.max(Number(filters.offset) || 0, 0);
-  const total = await db.collection('bank_transactions').countDocuments(query);
+  const sort = String(filters.sort || 'date_desc');
+  const sortMap = {
+    date_desc: { txn_date: -1, id: -1 },
+    date_asc: { txn_date: 1, id: 1 },
+    account_asc: { account_id: 1, txn_date: -1 },
+    account_desc: { account_id: -1, txn_date: -1 },
+    narration_asc: { narration: 1, txn_date: -1 },
+    narration_desc: { narration: -1, txn_date: -1 },
+    debit_asc: { withdrawal: 1, txn_date: -1 },
+    debit_desc: { withdrawal: -1, txn_date: -1 },
+    credit_asc: { deposit: 1, txn_date: -1 },
+    credit_desc: { deposit: -1, txn_date: -1 },
+    balance_asc: { balance: 1, txn_date: -1 },
+    balance_desc: { balance: -1, txn_date: -1 },
+    category_asc: { category: 1, txn_date: -1 },
+    category_desc: { category: -1, txn_date: -1 },
+    amount_asc: { withdrawal: 1, deposit: 1, txn_date: -1 },
+    amount_desc: { withdrawal: -1, deposit: -1, txn_date: -1 }
+  };
+  const sortSpec = sortMap[sort] || sortMap.date_desc;
+
+  const allForTotals = await db
+    .collection('bank_transactions')
+    .aggregate([
+      { $match: query },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: 1 },
+          total_debit: { $sum: '$withdrawal' },
+          total_credit: { $sum: '$deposit' }
+        }
+      }
+    ])
+    .toArray();
+  const totals = allForTotals[0] || { total: 0, total_debit: 0, total_credit: 0 };
+
   const rows = await db
     .collection('bank_transactions')
     .find(query)
-    .sort({ txn_date: -1, id: -1 })
+    .sort(sortSpec)
     .skip(offset)
     .limit(limit)
     .toArray();
@@ -564,7 +757,10 @@ async function mongoGetTransactions(filters = {}) {
       account_name: accountMap[r.account_id]?.account_name,
       account_number: accountMap[r.account_id]?.account_number
     })),
-    total,
+    total: totals.total,
+    total_debit: totals.total_debit,
+    total_credit: totals.total_credit,
+    net_cashflow: num(totals.total_credit) - num(totals.total_debit),
     limit,
     offset
   };
@@ -649,6 +845,12 @@ async function mongoGetAnalytics(filters = {}) {
     .slice(0, 15)
     .map(formatBankDoc);
 
+  const topCredits = [...rows]
+    .filter((r) => num(r.deposit) > 0)
+    .sort((a, b) => num(b.deposit) - num(a.deposit))
+    .slice(0, 15)
+    .map(formatBankDoc);
+
   const interestTax = {
     interest_earned: rows
       .filter((r) => r.category === 'Interest Income' || r.txn_type === 'interest')
@@ -683,18 +885,51 @@ async function mongoGetAnalytics(filters = {}) {
     };
   });
 
+  const byCategory = Object.values(catMap).sort(
+    (a, b) => b.total_debit + b.total_credit - (a.total_debit + a.total_credit)
+  );
+  const byMonth = Object.values(monthMap).sort((a, b) => a.month.localeCompare(b.month));
+
+  const interestMonthMap = {};
+  for (const r of rows) {
+    const month = String(r.txn_date).slice(0, 7);
+    if (!interestMonthMap[month]) {
+      interestMonthMap[month] = { month, interest: 0, tax: 0, fd_booked: 0 };
+    }
+    if (r.category === 'Interest Income' || r.txn_type === 'interest') {
+      interestMonthMap[month].interest += num(r.deposit);
+    }
+    if (r.category === 'TDS / Tax' || r.txn_type === 'tax') {
+      interestMonthMap[month].tax += num(r.withdrawal);
+    }
+    if (r.category === 'Fixed Deposit' || r.txn_type === 'fd_book') {
+      interestMonthMap[month].fd_booked += num(r.withdrawal);
+    }
+  }
+  const interestByMonth = Object.values(interestMonthMap)
+    .filter((r) => r.interest > 0 || r.tax > 0 || r.fd_booked > 0)
+    .sort((a, b) => a.month.localeCompare(b.month));
+
+  const uncategorizedCount = rows.filter((r) => {
+    const c = r.category || 'Uncategorized';
+    return !r.category || c === 'Uncategorized' || c === 'Expense / Debit' || c === 'Income / Credit';
+  }).length;
+  const extras = buildAnalyticsExtras(summary, byMonth, byCategory, uncategorizedCount);
   const categories = [...new Set(rows.map((r) => r.category).filter(Boolean))].sort();
 
   return {
-    summary,
-    byCategory: Object.values(catMap).sort(
-      (a, b) => b.total_debit + b.total_credit - (a.total_debit + a.total_credit)
-    ),
-    byMonth: Object.values(monthMap).sort((a, b) => a.month.localeCompare(b.month)),
+    summary: { ...summary, ...extras.summaryExtras },
+    byCategory,
+    expenseByCategory: extras.expenseByCategory,
+    byMonth,
+    interestByMonth,
     topExpenses,
+    topCredits,
     interestTax,
     balanceSeries,
     byAccount,
+    insights: extras.insights,
+    mom: extras.mom,
     categories
   };
 }

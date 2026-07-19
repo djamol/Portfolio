@@ -77,13 +77,25 @@ export class BankingService {
     );
   }
 
-  getTransactions(filters: Record<string, any> = {}): Observable<{ rows: BankTransaction[]; total: number }> {
+  getTransactions(filters: Record<string, any> = {}): Observable<{
+    rows: BankTransaction[];
+    total: number;
+    total_debit?: number;
+    total_credit?: number;
+    net_cashflow?: number;
+  }> {
     let params = new HttpParams();
     Object.entries(filters).forEach(([k, v]) => {
       if (v !== null && v !== undefined && v !== '') params = params.set(k, String(v));
     });
     return this.http.get<ApiResponse<BankTransaction[]>>(`${this.getApiUrl()}/transactions`, { params }).pipe(
-      map((r) => ({ rows: r.success ? r.data : [], total: r.meta?.total || 0 }))
+      map((r) => ({
+        rows: r.success ? r.data : [],
+        total: r.meta?.total || 0,
+        total_debit: r.meta?.total_debit,
+        total_credit: r.meta?.total_credit,
+        net_cashflow: r.meta?.net_cashflow
+      }))
     );
   }
 
