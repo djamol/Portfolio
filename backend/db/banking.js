@@ -1,9 +1,20 @@
 const { isMongoDb, getPool, getMongoDb } = require('../config/index');
-const { suggestCategory } = require('../utils/bank-parsers/common');
+const {
+  suggestCategory,
+  extractPayee,
+  buildFingerprint,
+  detectTxnType
+} = require('../utils/bank-parsers/common');
 
 function num(v, fallback = 0) {
   const n = Number(v);
   return Number.isFinite(n) ? n : fallback;
+}
+
+function categoryResult(narration, withdrawal, deposit, customRules, accountId, payee) {
+  const result = suggestCategory(narration, withdrawal, deposit, customRules, accountId, payee);
+  if (typeof result === 'string') return { category: result, source: 'auto' };
+  return result;
 }
 
 /* ===================== MySQL ===================== */
@@ -90,8 +101,8 @@ async function mysqlImportTransactions(accountId, transactions, importBatchId) {
         const [result] = await conn.query(
           `INSERT IGNORE INTO bank_transactions
             (account_id, txn_date, value_date, narration, ref_no, withdrawal, deposit, balance,
-             category, txn_type, fingerprint, raw_bank, tags, notes, import_batch_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             category, category_source, payee, txn_type, fingerprint, raw_bank, tags, notes, import_batch_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             accountId,
             txn.txn_date,
@@ -102,6 +113,8 @@ async function mysqlImportTransactions(accountId, transactions, importBatchId) {
             num(txn.deposit),
             txn.balance === null || txn.balance === undefined ? null : num(txn.balance),
             txn.category || null,
+            txn.category_source || 'auto',
+            txn.payee || null,
             txn.txn_type || null,
             txn.fingerprint,
             txn.raw_bank || null,
@@ -151,9 +164,13 @@ function buildTxnWhere(filters = {}) {
     params.push(filters.txn_type);
   }
   if (filters.q) {
-    where.push('(narration LIKE ? OR ref_no LIKE ? OR notes LIKE ?)');
+    where.push('(narration LIKE ? OR ref_no LIKE ? OR notes LIKE ? OR payee LIKE ? OR tags LIKE ?)');
     const like = `%${filters.q}%`;
-    params.push(like, like, like);
+    params.push(like, like, like, like, like);
+  }
+  if (filters.payee) {
+    where.push('payee LIKE ?');
+    params.push(`%${filters.payee}%`);
   }
   if (filters.min_amount) {
     where.push('(withdrawal >= ? OR deposit >= ?)');
@@ -224,11 +241,16 @@ async function mysqlUpdateTransaction(id, data) {
   const pool = getPool();
   const fields = [];
   const params = [];
-  for (const key of ['category', 'tags', 'notes', 'txn_type']) {
+  for (const key of ['category', 'tags', 'notes', 'txn_type', 'payee', 'category_source']) {
     if (data[key] !== undefined) {
       fields.push(`${key} = ?`);
       params.push(data[key]);
     }
+  }
+  // Manual edits lock category
+  if (data.category !== undefined && data.category_source === undefined) {
+    fields.push('category_source = ?');
+    params.push('manual');
   }
   if (!fields.length) {
     const [rows] = await pool.query('SELECT * FROM bank_transactions WHERE id = ?', [id]);
@@ -250,28 +272,46 @@ async function mysqlBulkCategorize(ids, category) {
   const pool = getPool();
   if (!ids?.length) return 0;
   const [result] = await pool.query(
-    `UPDATE bank_transactions SET category = ? WHERE id IN (${ids.map(() => '?').join(',')})`,
+    `UPDATE bank_transactions SET category = ?, category_source = 'manual'
+     WHERE id IN (${ids.map(() => '?').join(',')})`,
     [category, ...ids]
   );
   return result.affectedRows;
 }
 
-async function mysqlRecategorizeAll(accountId) {
+async function mysqlRecategorizeAll(accountId, { mode = 'auto_only', customRules = [] } = {}) {
   const pool = getPool();
   const params = [];
-  let sql = 'SELECT id, narration, withdrawal, deposit FROM bank_transactions';
+  let sql = 'SELECT id, account_id, narration, payee, withdrawal, deposit, category, category_source FROM bank_transactions';
+  const where = [];
   if (accountId) {
-    sql += ' WHERE account_id = ?';
+    where.push('account_id = ?');
     params.push(accountId);
   }
+  if (mode === 'uncategorized') {
+    where.push(`(category IS NULL OR category = '' OR category IN ('Uncategorized','Expense / Debit','Income / Credit'))`);
+  } else if (mode !== 'all') {
+    // auto_only (default): never overwrite manual
+    where.push(`(category_source IS NULL OR category_source <> 'manual')`);
+  }
+  if (where.length) sql += ` WHERE ${where.join(' AND ')}`;
   const [rows] = await pool.query(sql, params);
   let updated = 0;
   for (const row of rows) {
-    const category = suggestCategory(row.narration, row.withdrawal, row.deposit);
-    const [result] = await pool.query('UPDATE bank_transactions SET category = ? WHERE id = ?', [
-      category,
-      row.id
-    ]);
+    if (mode !== 'all' && row.category_source === 'manual') continue;
+    const suggested = categoryResult(
+      row.narration,
+      row.withdrawal,
+      row.deposit,
+      customRules,
+      row.account_id,
+      row.payee
+    );
+    const payee = row.payee || extractPayee(row.narration);
+    const [result] = await pool.query(
+      'UPDATE bank_transactions SET category = ?, category_source = ?, payee = COALESCE(payee, ?) WHERE id = ?',
+      [suggested.category, suggested.source, payee, row.id]
+    );
     updated += result.affectedRows;
   }
   return updated;
@@ -657,12 +697,15 @@ async function mongoImportTransactions(accountId, transactions, importBatchId) {
       deposit: num(txn.deposit),
       balance: txn.balance === null || txn.balance === undefined ? null : num(txn.balance),
       category: txn.category || null,
+      category_source: txn.category_source || 'auto',
+      payee: txn.payee || null,
       txn_type: txn.txn_type || null,
       fingerprint: txn.fingerprint,
       raw_bank: txn.raw_bank || null,
       tags: txn.tags || null,
       notes: txn.notes || null,
       import_batch_id: importBatchId || null,
+      linked_transfer_id: null,
       created_at: new Date(),
       updated_at: new Date()
     });
@@ -769,8 +812,11 @@ async function mongoGetTransactions(filters = {}) {
 async function mongoUpdateTransaction(id, data) {
   const db = getMongoDb();
   const $set = { updated_at: new Date() };
-  for (const key of ['category', 'tags', 'notes', 'txn_type']) {
+  for (const key of ['category', 'tags', 'notes', 'txn_type', 'payee', 'category_source']) {
     if (data[key] !== undefined) $set[key] = data[key];
+  }
+  if (data.category !== undefined && data.category_source === undefined) {
+    $set.category_source = 'manual';
   }
   await db.collection('bank_transactions').updateOne({ id: Number(id) }, { $set });
   const doc = await db.collection('bank_transactions').findOne({ id: Number(id) });
@@ -788,21 +834,47 @@ async function mongoBulkCategorize(ids, category) {
   if (!ids?.length) return 0;
   const result = await db.collection('bank_transactions').updateMany(
     { id: { $in: ids.map(Number) } },
-    { $set: { category, updated_at: new Date() } }
+    { $set: { category, category_source: 'manual', updated_at: new Date() } }
   );
   return result.modifiedCount;
 }
 
-async function mongoRecategorizeAll(accountId) {
+async function mongoRecategorizeAll(accountId, { mode = 'auto_only', customRules = [] } = {}) {
   const db = getMongoDb();
-  const query = accountId ? { account_id: Number(accountId) } : {};
+  const query = {};
+  if (accountId) query.account_id = Number(accountId);
+  if (mode === 'uncategorized') {
+    query.$or = [
+      { category: null },
+      { category: '' },
+      { category: { $in: ['Uncategorized', 'Expense / Debit', 'Income / Credit'] } }
+    ];
+  } else if (mode !== 'all') {
+    query.category_source = { $ne: 'manual' };
+  }
   const rows = await db.collection('bank_transactions').find(query).toArray();
   let updated = 0;
   for (const row of rows) {
-    const category = suggestCategory(row.narration, row.withdrawal, row.deposit);
+    if (mode !== 'all' && row.category_source === 'manual') continue;
+    const suggested = categoryResult(
+      row.narration,
+      row.withdrawal,
+      row.deposit,
+      customRules,
+      row.account_id,
+      row.payee
+    );
+    const payee = row.payee || extractPayee(row.narration);
     await db.collection('bank_transactions').updateOne(
       { id: row.id },
-      { $set: { category, updated_at: new Date() } }
+      {
+        $set: {
+          category: suggested.category,
+          category_source: suggested.source,
+          payee: row.payee || payee,
+          updated_at: new Date()
+        }
+      }
     );
     updated += 1;
   }
@@ -957,6 +1029,8 @@ async function mongoFindExistingFingerprints(accountId, fingerprints) {
 
 /* ===================== Public API ===================== */
 
+const advanced = require('./banking-advanced');
+
 const impl = () => (isMongoDb() ? 'mongo' : 'mysql');
 
 module.exports = {
@@ -977,5 +1051,6 @@ module.exports = {
   getAnalytics: (...a) => (impl() === 'mongo' ? mongoGetAnalytics(...a) : mysqlGetAnalytics(...a)),
   getCategories: (...a) => (impl() === 'mongo' ? mongoGetCategories(...a) : mysqlGetCategories(...a)),
   findExistingFingerprints: (...a) =>
-    impl() === 'mongo' ? mongoFindExistingFingerprints(...a) : mysqlFindExistingFingerprints(...a)
+    impl() === 'mongo' ? mongoFindExistingFingerprints(...a) : mysqlFindExistingFingerprints(...a),
+  ...advanced
 };

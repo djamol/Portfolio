@@ -14,15 +14,19 @@
     <button [class.active]="activeTab==='accounts'" (click)="setTab('accounts')">Accounts</button>
     <button [class.active]="activeTab==='import'" (click)="setTab('import')">Import</button>
     <button [class.active]="activeTab==='transactions'" (click)="setTab('transactions')">Transactions</button>
+    <button [class.active]="activeTab==='rules'" (click)="setTab('rules')">Rules</button>
     <button [class.active]="activeTab==='analytics'" (click)="setTab('analytics')">Analytics</button>
     <button [class.active]="activeTab==='cashflow'" (click)="setTab('cashflow')">Cashflow</button>
     <button [class.active]="activeTab==='interest'" (click)="setTab('interest')">Interest & FD</button>
+    <button [class.active]="activeTab==='insights'" (click)="setTab('insights')">Insights</button>
   </div>
 
-  <div class="filter-bar card-lite" *ngIf="activeTab==='overview' || activeTab==='transactions' || activeTab==='analytics' || activeTab==='cashflow' || activeTab==='interest'">
+  <div class="filter-bar card-lite" *ngIf="activeTab==='overview' || activeTab==='transactions' || activeTab==='analytics' || activeTab==='cashflow' || activeTab==='interest' || activeTab==='insights'">
     <select [(ngModel)]="filterAccountId" (ngModelChange)="applyFilters()">
       <option value="">All accounts</option>
-      <option *ngFor="let a of accounts" [ngValue]="a.id">{{ a.bank_name }} – {{ a.account_name }}</option>
+      <option *ngFor="let a of accounts" [ngValue]="a.id">
+        {{ a.bank_name }} – {{ a.account_name }}{{ (a.is_active === 0 || a.is_active === false) ? ' (inactive)' : '' }}
+      </option>
     </select>
     <div class="preset-row">
       <button type="button" class="preset-btn" [class.active]="datePreset==='1m'" (click)="applyDatePreset('1m')">1M</button>
@@ -105,6 +109,52 @@
       </div>
     </div>
 
+    <div class="card" *ngIf="budgets.length || true">
+      <h3>Budgets (this month)</h3>
+      <div class="form-grid" style="margin-bottom: 1rem;">
+        <div class="form-group">
+          <label>Category</label>
+          <select [(ngModel)]="budgetForm.category">
+            <option value="">Select…</option>
+            <option *ngFor="let c of categories" [value]="c">{{ c }}</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Amount</label>
+          <input type="number" [(ngModel)]="budgetForm.amount" min="0" />
+        </div>
+        <div class="form-group">
+          <label>&nbsp;</label>
+          <button class="btn btn-primary" type="button" (click)="saveBudget()">Add budget</button>
+        </div>
+      </div>
+      <table class="data-table compact" *ngIf="budgets.length; else noBudgets">
+        <thead>
+          <tr>
+            <th>Category</th>
+            <th>Budget</th>
+            <th>Spent</th>
+            <th>Remaining</th>
+            <th>%</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let b of budgets">
+            <td>{{ b.category }}</td>
+            <td>₹{{ formatMoney(b.amount) }}</td>
+            <td class="debit">₹{{ formatMoney(b.spent) }}</td>
+            <td [class.credit]="(b.remaining||0)>=0" [class.debit]="(b.remaining||0)<0">₹{{ formatMoney(b.remaining) }}</td>
+            <td>{{ b.pct || 0 }}%</td>
+            <td><button class="link-btn danger" (click)="deleteBudget(b)">×</button></td>
+          </tr>
+        </tbody>
+      </table>
+      <ng-template #noBudgets>
+        <p class="empty">No budgets yet. Add a category budget to track spending.</p>
+      </ng-template>
+    </div>
+
     <div class="card" *ngIf="accounts.length">
       <h3>Accounts snapshot</h3>
       <table class="data-table">
@@ -118,12 +168,12 @@
           </tr>
         </thead>
         <tbody>
-          <tr *ngFor="let a of accounts">
+          <tr *ngFor="let a of accounts" [class.inactive-row]="a.is_active === 0 || a.is_active === false">
             <td>{{ a.bank_name }}</td>
-            <td>{{ a.account_name }}</td>
+            <td>{{ a.account_name }} <span class="badge" *ngIf="a.is_active === 0 || a.is_active === false">inactive</span></td>
             <td>{{ maskAccount(a.account_number) }}</td>
             <td>{{ a.txn_count || 0 }}</td>
-            <td>₹{{ formatMoney(a.latest_balance) }}</td>
+            <td>{{ formatCurrency(a.latest_balance, a.currency) }}</td>
           </tr>
         </tbody>
       </table>
@@ -171,6 +221,22 @@
           <label>Opening balance</label>
           <input type="number" [(ngModel)]="accountForm.opening_balance" />
         </div>
+        <div class="form-group">
+          <label>Currency</label>
+          <select [(ngModel)]="accountForm.currency">
+            <option value="INR">INR</option>
+            <option value="USD">USD</option>
+            <option value="EUR">EUR</option>
+            <option value="GBP">GBP</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Active</label>
+          <select [(ngModel)]="accountForm.is_active">
+            <option [ngValue]="1">Active</option>
+            <option [ngValue]="0">Inactive</option>
+          </select>
+        </div>
         <div class="form-group full">
           <label>Notes</label>
           <input [(ngModel)]="accountForm.notes" />
@@ -191,20 +257,22 @@
             <th>Number</th>
             <th>IFSC</th>
             <th>Type</th>
+            <th>Status</th>
             <th>Txns</th>
             <th>Balance</th>
             <th></th>
           </tr>
         </thead>
         <tbody>
-          <tr *ngFor="let a of accounts">
+          <tr *ngFor="let a of accounts" [class.inactive-row]="a.is_active === 0 || a.is_active === false">
             <td>{{ a.bank_name }}</td>
             <td>{{ a.account_name }}</td>
             <td>{{ a.account_number || '—' }}</td>
             <td>{{ a.ifsc || '—' }}</td>
             <td>{{ a.account_type }}</td>
+            <td>{{ (a.is_active === 0 || a.is_active === false) ? 'Inactive' : 'Active' }}</td>
             <td>{{ a.txn_count || 0 }}</td>
-            <td>₹{{ formatMoney(a.latest_balance) }}</td>
+            <td>{{ formatCurrency(a.latest_balance, a.currency) }}</td>
             <td class="row-actions">
               <button class="link-btn" (click)="openEditAccount(a)">Edit</button>
               <button class="link-btn danger" (click)="deleteAccount(a)">Delete</button>
@@ -223,18 +291,28 @@
     <div class="card">
       <h3>Import bank statement</h3>
       <p class="hint">
-        Supports <strong>HDFC CSV</strong>, <strong>ICICI</strong> XLS,
-        <strong>DCB</strong> consolidated statement XLS, and generic CSV/Excel.
         Duplicate transactions are skipped automatically (same date, amounts, ref, narration).
-        Prefer unlocked CSV/Excel exports over PDF.
+        PDF is not supported — use CSV or Excel exports.
       </p>
+      <table class="data-table compact" style="margin-bottom: 1rem;">
+        <thead>
+          <tr><th>Bank</th><th>Formats</th><th>Support</th></tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let b of bankSupport">
+            <td>{{ b.name }}</td>
+            <td>{{ b.formats }}</td>
+            <td>{{ b.status }}</td>
+          </tr>
+        </tbody>
+      </table>
 
       <div class="form-grid">
         <div class="form-group">
           <label>Target account</label>
           <select [(ngModel)]="importAccountId">
             <option [ngValue]="''" disabled>Select account</option>
-            <option *ngFor="let a of accounts" [ngValue]="a.id">{{ a.bank_name }} – {{ a.account_name }}</option>
+            <option *ngFor="let a of activeAccounts" [ngValue]="a.id">{{ a.bank_name }} – {{ a.account_name }}</option>
           </select>
         </div>
         <div class="form-group">
@@ -244,12 +322,15 @@
             <option value="HDFC">HDFC</option>
             <option value="ICICI">ICICI</option>
             <option value="DCB">DCB</option>
+            <option value="SBI">SBI</option>
+            <option value="AXIS">Axis</option>
+            <option value="KOTAK">Kotak</option>
             <option value="GENERIC">Generic</option>
           </select>
         </div>
         <div class="form-group full">
-          <label>Statement file</label>
-          <input type="file" accept=".csv,.xls,.xlsx,.pdf" (change)="onFileSelected($event)" />
+          <label>Statement file (CSV / Excel only)</label>
+          <input type="file" accept=".csv,.xls,.xlsx" (change)="onFileSelected($event)" />
         </div>
       </div>
 
@@ -277,6 +358,11 @@
           <span class="preview-stat-value">{{ importPreview.new_count || 0 }}</span>
         </div>
       </div>
+      <p class="hint" *ngIf="importPreview.date_from">
+        Period {{ importPreview.date_from }} → {{ importPreview.date_to }}
+        · Debits ₹{{ formatMoney(importPreview.total_debit) }}
+        · Credits ₹{{ formatMoney(importPreview.total_credit) }}
+      </p>
       <p class="hint" *ngIf="importPreview.meta">
         A/c {{ importPreview.meta.accountNumber || '—' }}
         <span *ngIf="importPreview.meta.ifsc"> · IFSC {{ importPreview.meta.ifsc }}</span>
@@ -316,7 +402,15 @@
         <li>Inserted: {{ lastImportResult.inserted }}</li>
         <li>Skipped duplicates: {{ lastImportResult.skipped }}</li>
         <li>Batch: {{ lastImportResult.import_batch_id }}</li>
+        <li *ngIf="lastImportResult.opening_warning">
+          Opening balance warning: account opening ₹{{ formatMoney(lastImportResult.opening_warning.opening_balance) }}
+          vs first txn balance ₹{{ formatMoney(lastImportResult.opening_warning.first_txn_balance) }}
+          on {{ lastImportResult.opening_warning.first_txn_date }}
+        </li>
       </ul>
+      <div class="section-actions">
+        <button class="btn btn-danger-outline" type="button" (click)="undoLastImport()">Undo this import</button>
+      </div>
     </div>
   </section>
 
@@ -378,10 +472,63 @@
       <button class="btn btn-danger-outline" (click)="bulkDelete()" [disabled]="!selectedIds.size">
         Delete selected
       </button>
+      <select [(ngModel)]="recategorizeMode" title="Recategorize mode">
+        <option value="auto_only">Auto only (keep manual)</option>
+        <option value="uncategorized">Uncategorized only</option>
+        <option value="all">All (overwrite)</option>
+      </select>
       <button class="btn btn-secondary" (click)="recategorize()">Auto-categorize</button>
+      <button class="btn btn-secondary" (click)="openManualTxn()">Add manual</button>
       <button class="btn btn-secondary" (click)="exportCsv()" [disabled]="exporting || !txnTotal">
         {{ exporting ? 'Exporting…' : 'Export CSV' }}
       </button>
+    </div>
+
+    <div class="card" *ngIf="showManualTxn">
+      <h3>Manual transaction</h3>
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Account</label>
+          <select [(ngModel)]="manualTxn.account_id">
+            <option *ngFor="let a of activeAccounts" [ngValue]="a.id">{{ a.bank_name }} – {{ a.account_name }}</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Date</label>
+          <input type="date" [(ngModel)]="manualTxn.txn_date" />
+        </div>
+        <div class="form-group">
+          <label>Withdrawal</label>
+          <input type="number" [(ngModel)]="manualTxn.withdrawal" min="0" />
+        </div>
+        <div class="form-group">
+          <label>Deposit</label>
+          <input type="number" [(ngModel)]="manualTxn.deposit" min="0" />
+        </div>
+        <div class="form-group full">
+          <label>Narration</label>
+          <input [(ngModel)]="manualTxn.narration" />
+        </div>
+        <div class="form-group">
+          <label>Category</label>
+          <select [(ngModel)]="manualTxn.category">
+            <option value="">Auto</option>
+            <option *ngFor="let c of categories" [value]="c">{{ c }}</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Tags</label>
+          <input [(ngModel)]="manualTxn.tags" placeholder="comma,separated" />
+        </div>
+        <div class="form-group full">
+          <label>Notes</label>
+          <input [(ngModel)]="manualTxn.notes" />
+        </div>
+      </div>
+      <div class="section-actions">
+        <button class="btn btn-primary" (click)="saveManualTxn()">Save</button>
+        <button class="btn btn-secondary" (click)="showManualTxn=false">Cancel</button>
+      </div>
     </div>
 
     <div class="card table-scroll" [class.loading-overlay]="txnLoading">
@@ -428,7 +575,23 @@
                   <div *ngIf="t.ref_no"><strong>Ref:</strong> {{ t.ref_no }}</div>
                   <div *ngIf="t.value_date"><strong>Value date:</strong> {{ t.value_date }}</div>
                   <div *ngIf="t.txn_type"><strong>Type:</strong> {{ t.txn_type }}</div>
+                  <div *ngIf="t.category_source"><strong>Category source:</strong> {{ t.category_source }}</div>
                   <div *ngIf="t.account_name"><strong>Account:</strong> {{ t.bank_name }} – {{ t.account_name }} ({{ maskAccount(t.account_number) }})</div>
+                  <div class="form-grid" style="margin-top: 0.75rem;">
+                    <div class="form-group">
+                      <label>Payee</label>
+                      <input [(ngModel)]="t.payee" />
+                    </div>
+                    <div class="form-group">
+                      <label>Tags</label>
+                      <input [(ngModel)]="t.tags" placeholder="comma,separated" />
+                    </div>
+                    <div class="form-group full">
+                      <label>Notes</label>
+                      <input [(ngModel)]="t.notes" />
+                    </div>
+                  </div>
+                  <button class="btn btn-primary" type="button" (click)="saveTxnDetails(t)">Save details</button>
                 </div>
               </td>
             </tr>
@@ -455,6 +618,185 @@
       <span class="muted">of {{ totalPages }}</span>
       <button class="btn btn-secondary" (click)="jumpToPage()" [disabled]="!jumpPage">Go</button>
       <button class="btn btn-secondary" (click)="nextPage()" [disabled]="currentPage >= totalPages">Next</button>
+    </div>
+  </section>
+
+  <!-- RULES -->
+  <section *ngIf="activeTab==='rules'">
+    <div class="section-actions">
+      <button class="btn btn-primary" (click)="openRuleForm()">Add rule</button>
+      <select [(ngModel)]="recategorizeMode">
+        <option value="auto_only">Apply to auto only</option>
+        <option value="uncategorized">Uncategorized only</option>
+        <option value="all">Overwrite all</option>
+      </select>
+      <button class="btn btn-secondary" (click)="recategorize()">Run auto-categorize now</button>
+    </div>
+    <p class="hint">
+      Custom rules run before built-in patterns. Manual categories are preserved unless you choose “Overwrite all”.
+      Pattern can be plain text or a regex (e.g. <code>SWIGGY|ZOMATO</code>).
+    </p>
+
+    <div class="card" *ngIf="showRuleForm">
+      <h3>New category rule</h3>
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Pattern</label>
+          <input [(ngModel)]="ruleForm.pattern" placeholder="e.g. SWIGGY" />
+        </div>
+        <div class="form-group">
+          <label>Match field</label>
+          <select [(ngModel)]="ruleForm.match_field">
+            <option value="narration">Narration</option>
+            <option value="payee">Payee</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Category</label>
+          <select [(ngModel)]="ruleForm.category">
+            <option *ngFor="let c of categories" [value]="c">{{ c }}</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Priority (lower = first)</label>
+          <input type="number" [(ngModel)]="ruleForm.priority" />
+        </div>
+      </div>
+      <div class="section-actions">
+        <button class="btn btn-primary" (click)="saveRule()">Save rule</button>
+        <button class="btn btn-secondary" (click)="showRuleForm=false">Cancel</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <table class="data-table" *ngIf="rules.length; else noRules">
+        <thead>
+          <tr>
+            <th>Priority</th>
+            <th>Pattern</th>
+            <th>Field</th>
+            <th>Category</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let r of rules">
+            <td>{{ r.priority }}</td>
+            <td><code>{{ r.pattern }}</code></td>
+            <td>{{ r.match_field }}</td>
+            <td>{{ r.category }}</td>
+            <td><button class="link-btn danger" (click)="deleteRule(r)">Delete</button></td>
+          </tr>
+        </tbody>
+      </table>
+      <ng-template #noRules>
+        <p class="empty">No custom rules yet. Example: pattern <code>SWIGGY</code> → category Food / Shopping.</p>
+      </ng-template>
+    </div>
+  </section>
+
+  <!-- INSIGHTS -->
+  <section *ngIf="activeTab==='insights'">
+    <div class="section-actions wrap">
+      <button class="btn btn-primary" (click)="loadInsights()">Refresh insights</button>
+      <button class="btn btn-secondary" (click)="runTransferMatch()">Match cross-account transfers</button>
+      <select [(ngModel)]="continuityAccountId">
+        <option [ngValue]="''">Account for continuity…</option>
+        <option *ngFor="let a of accounts" [ngValue]="a.id">{{ a.bank_name }} – {{ a.account_name }}</option>
+      </select>
+      <button class="btn btn-secondary" (click)="checkContinuity()" [disabled]="!continuityAccountId">Check balance continuity</button>
+    </div>
+
+    <div class="stat-grid" *ngIf="forecast?.projected_next_month">
+      <div class="stat-card">
+        <div class="stat-label">Projected {{ forecast.projected_next_month.month }} credits</div>
+        <div class="stat-value credit">₹{{ formatMoney(forecast.projected_next_month.avg_credit) }}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Projected debits</div>
+        <div class="stat-value debit">₹{{ formatMoney(forecast.projected_next_month.avg_debit) }}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Projected net</div>
+        <div class="stat-value">₹{{ formatMoney(forecast.projected_next_month.net) }}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Projected interest</div>
+        <div class="stat-value">₹{{ formatMoney(forecast.projected_next_month.projected_interest) }}</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Recurring payments / credits</h3>
+      <table class="data-table compact" *ngIf="recurring.length; else noRecurring">
+        <thead>
+          <tr>
+            <th>Payee</th>
+            <th>Amount</th>
+            <th>Times</th>
+            <th>Avg gap</th>
+            <th>Last</th>
+            <th>Next expected</th>
+            <th>Category</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let r of recurring">
+            <td>{{ r.payee }}</td>
+            <td [class.debit]="r.is_debit" [class.credit]="!r.is_debit">₹{{ formatMoney(r.amount) }}</td>
+            <td>{{ r.occurrences }}</td>
+            <td>{{ r.avg_gap_days }}d</td>
+            <td>{{ r.last_date }}</td>
+            <td>{{ r.next_expected }}</td>
+            <td>{{ r.category || '—' }}</td>
+          </tr>
+        </tbody>
+      </table>
+      <ng-template #noRecurring>
+        <p class="empty">No recurring patterns detected yet (needs 3+ similar monthly transactions).</p>
+      </ng-template>
+    </div>
+
+    <div class="card" *ngIf="forecast?.upcoming_outflows?.length">
+      <h3>Upcoming outflows (from recurring)</h3>
+      <table class="data-table compact">
+        <thead>
+          <tr><th>Payee</th><th>Amount</th><th>Expected</th><th>Category</th></tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let u of forecast.upcoming_outflows">
+            <td>{{ u.payee }}</td>
+            <td class="debit">₹{{ formatMoney(u.amount) }}</td>
+            <td>{{ u.next_expected }}</td>
+            <td>{{ u.category || '—' }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card" *ngIf="continuity">
+      <h3>Balance continuity — {{ continuity.checked }} txns checked</h3>
+      <p class="hint" *ngIf="!continuity.gaps?.length">No gaps found.</p>
+      <table class="data-table compact" *ngIf="continuity.gaps?.length">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Expected</th>
+            <th>Actual</th>
+            <th>Diff</th>
+            <th>Narration</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let g of continuity.gaps">
+            <td>{{ g.txn_date }}</td>
+            <td>₹{{ formatMoney(g.expected_balance) }}</td>
+            <td>₹{{ formatMoney(g.actual_balance) }}</td>
+            <td class="debit">₹{{ formatMoney(g.diff) }}</td>
+            <td class="narration">{{ g.narration }}</td>
+          </tr>
+        </tbody>
+      </table>
     </div>
   </section>
 

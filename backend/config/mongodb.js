@@ -9,7 +9,9 @@ const COLLECTIONS = [
   'investment_history',
   'investment_transactions',
   'bank_accounts',
-  'bank_transactions'
+  'bank_transactions',
+  'bank_category_rules',
+  'bank_budgets'
 ];
 
 const mongoConfig = {
@@ -61,7 +63,11 @@ async function ensureIndexes(database) {
     { collection: 'bank_transactions', spec: { account_id: 1, fingerprint: 1 }, options: { unique: true } },
     { collection: 'bank_transactions', spec: { txn_date: -1 } },
     { collection: 'bank_transactions', spec: { account_id: 1, txn_date: -1 } },
-    { collection: 'bank_transactions', spec: { category: 1 } }
+    { collection: 'bank_transactions', spec: { category: 1 } },
+    { collection: 'bank_transactions', spec: { payee: 1 } },
+    { collection: 'bank_transactions', spec: { import_batch_id: 1 } },
+    { collection: 'bank_category_rules', spec: { priority: 1 } },
+    { collection: 'bank_budgets', spec: { period_month: 1, category: 1 } }
   ];
 
   for (const { collection, spec, options } of indexSpecs) {

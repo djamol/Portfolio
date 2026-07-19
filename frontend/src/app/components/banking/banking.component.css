@@ -659,3 +659,29 @@ strong.debit {
     gap: 2px;
   }
 }
+
+.inactive-row {
+  opacity: 0.55;
+}
+
+.badge {
+  display: inline-block;
+  margin-left: 0.35rem;
+  padding: 0.1rem 0.4rem;
+  font-size: 0.7rem;
+  border-radius: 4px;
+  background: #e2e8f0;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.btn-danger-outline {
+  border: 1px solid #ef4444;
+  color: #b91c1c;
+  background: transparent;
+}
+
+.btn-danger-outline:hover:not(:disabled) {
+  background: #fef2f2;
+}

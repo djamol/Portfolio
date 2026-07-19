@@ -26,7 +26,6 @@ function parseBankDate(value) {
     return value.toISOString().slice(0, 10);
   }
   if (typeof value === 'number') {
-    // Excel serial date
     const epoch = new Date(Date.UTC(1899, 11, 30));
     const date = new Date(epoch.getTime() + value * 86400000);
     return date.toISOString().slice(0, 10);
@@ -35,7 +34,6 @@ function parseBankDate(value) {
   const raw = String(value).trim();
   if (!raw || raw === '-') return null;
 
-  // DD/MM/YYYY or DD-MM-YYYY (also 2-digit year)
   let m = raw.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
   if (m) {
     let [, dd, mm, yyyy] = m;
@@ -43,11 +41,9 @@ function parseBankDate(value) {
     return `${yyyy.padStart(4, '0')}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`;
   }
 
-  // YYYY-MM-DD
   m = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (m) return raw.slice(0, 10);
 
-  // DD-MMM-YYYY or DD/MMM/YYYY
   m = raw.match(/^(\d{1,2})[\/\-]([A-Za-z]{3,9})[\/\-](\d{2,4})$/);
   if (m) {
     const months = {
@@ -64,7 +60,6 @@ function parseBankDate(value) {
     }
   }
 
-  // Month DD, YYYY
   m = raw.match(/^([A-Za-z]+)\s+(\d{1,2}),?\s+(\d{4})$/);
   if (m) {
     const parsed = new Date(`${m[1]} ${m[2]}, ${m[3]}`);
@@ -118,14 +113,81 @@ const CATEGORY_RULES = [
   { category: 'PayPal / International', patterns: [/PAYPAL/i, /OPGSP/i] }
 ];
 
-function suggestCategory(narration, withdrawal = 0, deposit = 0) {
+/**
+ * Extract merchant / UPI counterparty from Indian bank narrations.
+ */
+function extractPayee(narration) {
+  const text = normalizeWhitespace(narration);
+  if (!text) return null;
+
+  // UPI-NAME/… or UPI/NAME/…
+  let m = text.match(/\bUPI[-:\/]\s*([A-Za-z0-9 .&'_-]{2,60})/i);
+  if (m) {
+    const name = normalizeWhitespace(m[1].split(/[\/\-]/)[0]);
+    if (name && !/^(PAY|COLLECT|IN|DR|CR)$/i.test(name)) return name.slice(0, 120);
+  }
+
+  // VPA: name@bank
+  m = text.match(/\b([A-Za-z0-9._-]{3,40}@[A-Za-z]{2,20})\b/);
+  if (m) return m[1].slice(0, 120);
+
+  // NEFT/IMPS … - NAME -
+  m = text.match(/\b(?:NEFT|IMPS|RTGS)[-\/A-Z0-9]*\s+([A-Za-z][A-Za-z0-9 .&']{2,50})/i);
+  if (m) return normalizeWhitespace(m[1]).slice(0, 120);
+
+  // POS MERCHANT
+  m = text.match(/\bPOS\s+\S+\s+(.+?)(?:\s+\d|$)/i);
+  if (m) return normalizeWhitespace(m[1]).slice(0, 120);
+
+  return null;
+}
+
+function matchCustomRules(narration, payee, customRules = [], accountId = null) {
+  if (!customRules?.length) return null;
+  const text = normalizeWhitespace(narration);
+  const payeeText = normalizeWhitespace(payee);
+  const sorted = [...customRules]
+    .filter((r) => r.is_active !== 0 && r.is_active !== false)
+    .sort((a, b) => Number(a.priority || 100) - Number(b.priority || 100));
+
+  for (const rule of sorted) {
+    if (rule.account_id && accountId && Number(rule.account_id) !== Number(accountId)) continue;
+    const field = String(rule.match_field || 'narration').toLowerCase();
+    const haystack = field === 'payee' ? payeeText : text;
+    if (!haystack) continue;
+    const pattern = String(rule.pattern || '').trim();
+    if (!pattern) continue;
+    try {
+      const re = new RegExp(pattern, 'i');
+      if (re.test(haystack)) {
+        return { category: rule.category, source: 'rule' };
+      }
+    } catch {
+      if (haystack.toLowerCase().includes(pattern.toLowerCase())) {
+        return { category: rule.category, source: 'rule' };
+      }
+    }
+  }
+  return null;
+}
+
+function suggestCategory(narration, withdrawal = 0, deposit = 0, customRules = [], accountId = null, payee = null) {
+  const custom = matchCustomRules(narration, payee, customRules, accountId);
+  if (custom) return custom;
+
   const text = normalizeWhitespace(narration);
   for (const rule of CATEGORY_RULES) {
-    if (rule.patterns.some((re) => re.test(text))) return rule.category;
+    if (rule.patterns.some((re) => re.test(text))) {
+      return { category: rule.category, source: 'auto' };
+    }
   }
-  if (Number(deposit) > 0 && Number(withdrawal) <= 0) return 'Income / Credit';
-  if (Number(withdrawal) > 0) return 'Expense / Debit';
-  return 'Uncategorized';
+  if (Number(deposit) > 0 && Number(withdrawal) <= 0) {
+    return { category: 'Income / Credit', source: 'auto' };
+  }
+  if (Number(withdrawal) > 0) {
+    return { category: 'Expense / Debit', source: 'auto' };
+  }
+  return { category: 'Uncategorized', source: 'auto' };
 }
 
 function detectTxnType(withdrawal, deposit, narration = '') {
@@ -141,7 +203,7 @@ function detectTxnType(withdrawal, deposit, narration = '') {
   return 'other';
 }
 
-function finalizeParsedTxn(txn, accountId) {
+function finalizeParsedTxn(txn, accountId, customRules = []) {
   const narration = normalizeWhitespace(txn.narration);
   const withdrawal = Number(txn.withdrawal) || 0;
   const deposit = Number(txn.deposit) || 0;
@@ -149,7 +211,18 @@ function finalizeParsedTxn(txn, accountId) {
   const valueDate = txn.valueDate || txnDate;
   const refNo = normalizeWhitespace(txn.refNo);
   const balance = txn.balance === null || txn.balance === undefined ? null : Number(txn.balance);
-  const category = txn.category || suggestCategory(narration, withdrawal, deposit);
+  const payee = txn.payee || extractPayee(narration);
+  let category = txn.category || null;
+  let categorySource = txn.categorySource || txn.category_source || null;
+
+  if (!category) {
+    const suggested = suggestCategory(narration, withdrawal, deposit, customRules, accountId, payee);
+    category = suggested.category;
+    categorySource = suggested.source;
+  } else if (!categorySource) {
+    categorySource = 'auto';
+  }
+
   const txnType = txn.txnType || detectTxnType(withdrawal, deposit, narration);
   const fingerprint = buildFingerprint({
     accountId,
@@ -171,6 +244,8 @@ function finalizeParsedTxn(txn, accountId) {
     deposit,
     balance,
     category,
+    category_source: categorySource,
+    payee: payee || null,
     txn_type: txnType,
     fingerprint,
     raw_bank: txn.rawBank || null,
@@ -184,6 +259,8 @@ module.exports = {
   parseIndianAmount,
   parseBankDate,
   buildFingerprint,
+  extractPayee,
+  matchCustomRules,
   suggestCategory,
   detectTxnType,
   finalizeParsedTxn,

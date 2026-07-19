@@ -2,11 +2,22 @@ import { Component, OnInit } from '@angular/core';
 import { ChartConfiguration, ChartOptions } from 'chart.js';
 import {
   BankAccount,
+  BankBudget,
   BankingService,
-  BankTransaction
+  BankTransaction,
+  CategoryRule
 } from '../../services/banking.service';
 
-type TabId = 'overview' | 'accounts' | 'import' | 'transactions' | 'analytics' | 'cashflow' | 'interest';
+type TabId =
+  | 'overview'
+  | 'accounts'
+  | 'import'
+  | 'transactions'
+  | 'rules'
+  | 'analytics'
+  | 'cashflow'
+  | 'interest'
+  | 'insights';
 type DatePreset = '1m' | '3m' | '6m' | 'ytd' | '1y' | 'all' | 'custom';
 type PeriodGrain = 'month' | 'quarter' | 'year';
 
@@ -68,6 +79,30 @@ export class BankingComponent implements OnInit {
   bulkCategory = '';
   expandedTxnId: number | null = null;
   exporting = false;
+  recategorizeMode: 'auto_only' | 'uncategorized' | 'all' = 'auto_only';
+
+  rules: CategoryRule[] = [];
+  ruleForm: CategoryRule = { pattern: '', match_field: 'narration', category: '', priority: 100, is_active: 1 };
+  showRuleForm = false;
+
+  showManualTxn = false;
+  manualTxn: Partial<BankTransaction> = this.emptyManualTxn();
+
+  budgets: BankBudget[] = [];
+  budgetForm: BankBudget = { category: '', amount: 0, period_month: '' };
+  recurring: any[] = [];
+  forecast: any = null;
+  continuity: any = null;
+  continuityAccountId: number | '' = '';
+
+  readonly bankSupport = [
+    { name: 'HDFC', formats: 'CSV', status: 'Full' },
+    { name: 'ICICI', formats: 'XLS / XLSX', status: 'Full' },
+    { name: 'DCB', formats: 'XLS / XLSX', status: 'Full' },
+    { name: 'SBI', formats: 'CSV / Excel', status: 'Generic+' },
+    { name: 'Axis', formats: 'CSV / Excel', status: 'Generic+' },
+    { name: 'Kotak', formats: 'CSV / Excel', status: 'Generic+' }
+  ];
 
   categoryChartData: ChartConfiguration<'doughnut'>['data'] = { labels: [], datasets: [] };
   expenseChartData: ChartConfiguration<'doughnut'>['data'] = { labels: [], datasets: [] };
@@ -256,18 +291,42 @@ export class BankingComponent implements OnInit {
     };
   }
 
+  emptyManualTxn(): Partial<BankTransaction> {
+    return {
+      account_id: undefined,
+      txn_date: this.toIsoDate(new Date()),
+      narration: '',
+      withdrawal: 0,
+      deposit: 0,
+      category: '',
+      tags: '',
+      notes: ''
+    };
+  }
+
+  get activeAccounts(): BankAccount[] {
+    return this.accounts.filter((a) => a.is_active !== 0 && a.is_active !== false);
+  }
+
+  get filterAccounts(): BankAccount[] {
+    return this.accounts;
+  }
+
   setTab(tab: TabId) {
     this.activeTab = tab;
     if (tab === 'transactions') this.loadTransactions();
     if (tab === 'analytics' || tab === 'overview' || tab === 'cashflow' || tab === 'interest') {
       this.loadAnalytics();
     }
+    if (tab === 'rules') this.loadRules();
+    if (tab === 'insights') this.loadInsights();
+    if (tab === 'overview') this.loadBudgets();
   }
 
   refreshAll() {
     this.loading = true;
     this.message = '';
-    let pending = 3;
+    let pending = 4;
     const done = () => {
       pending -= 1;
       if (pending <= 0) this.loading = false;
@@ -276,7 +335,9 @@ export class BankingComponent implements OnInit {
     this.bankingService.getAccounts().subscribe({
       next: (rows) => {
         this.accounts = rows;
-        if (!this.importAccountId && rows.length) this.importAccountId = rows[0].id;
+        if (!this.importAccountId && this.activeAccounts.length) {
+          this.importAccountId = this.activeAccounts[0].id;
+        }
         done();
       },
       error: (err) => {
@@ -293,8 +354,11 @@ export class BankingComponent implements OnInit {
       error: () => done()
     });
 
+    this.loadRules(done);
     this.loadAnalytics(done);
     if (this.activeTab === 'transactions') this.loadTransactions();
+    if (this.activeTab === 'insights') this.loadInsights();
+    this.loadBudgets();
   }
 
   private buildTxnFilters(forExport = false): Record<string, any> {
@@ -604,7 +668,9 @@ export class BankingComponent implements OnInit {
   applyFilters() {
     this.filterOffset = 0;
     if (this.activeTab === 'transactions') this.loadTransactions();
+    if (this.activeTab === 'insights') this.loadInsights();
     this.loadAnalytics();
+    this.loadBudgets();
   }
 
   clearFilters() {
@@ -709,33 +775,212 @@ export class BankingComponent implements OnInit {
   bulkDelete() {
     if (!this.selectedIds.size) return;
     if (!confirm(`Delete ${this.selectedIds.size} selected transactions?`)) return;
-    const ids = [...this.selectedIds];
-    let done = 0;
-    let failed = 0;
-    ids.forEach((id) => {
-      this.bankingService.deleteTransaction(id).subscribe({
-        next: () => {
-          done += 1;
-          if (done + failed === ids.length) {
-            this.flash(failed ? 'error' : 'success', `Deleted ${done}${failed ? `, failed ${failed}` : ''}`);
-            this.loadTransactions();
-            this.loadAnalytics();
-          }
-        },
-        error: () => {
-          failed += 1;
-          if (done + failed === ids.length) {
-            this.flash('error', `Deleted ${done}, failed ${failed}`);
-            this.loadTransactions();
-            this.loadAnalytics();
-          }
-        }
-      });
+    this.bankingService.bulkDelete([...this.selectedIds]).subscribe({
+      next: (n) => {
+        this.flash('success', `Deleted ${n} transactions`);
+        this.loadTransactions();
+        this.loadAnalytics();
+      },
+      error: (err) => this.flash('error', err.message || 'Bulk delete failed')
     });
   }
 
   toggleExpand(id: number) {
     this.expandedTxnId = this.expandedTxnId === id ? null : id;
+  }
+
+  saveTxnDetails(txn: BankTransaction) {
+    this.bankingService
+      .updateTransaction(txn.id, {
+        tags: txn.tags || null,
+        notes: txn.notes || null,
+        payee: txn.payee || null,
+        category: txn.category || undefined
+      })
+      .subscribe({
+        next: (row) => {
+          if (row) Object.assign(txn, row);
+          this.flash('success', 'Transaction details saved');
+        },
+        error: (err) => this.flash('error', err.message || 'Save failed')
+      });
+  }
+
+  openManualTxn() {
+    this.manualTxn = this.emptyManualTxn();
+    if (this.filterAccountId) this.manualTxn.account_id = Number(this.filterAccountId);
+    else if (this.activeAccounts[0]) this.manualTxn.account_id = this.activeAccounts[0].id;
+    this.showManualTxn = true;
+  }
+
+  saveManualTxn() {
+    if (!this.manualTxn.account_id || !this.manualTxn.txn_date) {
+      this.flash('error', 'Account and date are required');
+      return;
+    }
+    this.bankingService.createTransaction(this.manualTxn).subscribe({
+      next: () => {
+        this.showManualTxn = false;
+        this.flash('success', 'Manual transaction added');
+        this.loadTransactions();
+        this.loadAnalytics();
+      },
+      error: (err) => this.flash('error', err.error?.error || err.message || 'Create failed')
+    });
+  }
+
+  loadRules(done?: () => void) {
+    this.bankingService.getRules().subscribe({
+      next: (rows) => {
+        this.rules = rows;
+        done?.();
+      },
+      error: () => done?.()
+    });
+  }
+
+  openRuleForm() {
+    this.ruleForm = { pattern: '', match_field: 'narration', category: '', priority: 100, is_active: 1 };
+    this.showRuleForm = true;
+  }
+
+  saveRule() {
+    if (!this.ruleForm.pattern || !this.ruleForm.category) {
+      this.flash('error', 'Pattern and category are required');
+      return;
+    }
+    this.bankingService.createRule(this.ruleForm).subscribe({
+      next: () => {
+        this.showRuleForm = false;
+        this.flash('success', 'Rule created');
+        this.loadRules();
+      },
+      error: (err) => this.flash('error', err.message || 'Failed to save rule')
+    });
+  }
+
+  deleteRule(rule: CategoryRule) {
+    if (!rule.id || !confirm(`Delete rule "${rule.pattern}" → ${rule.category}?`)) return;
+    this.bankingService.deleteRule(rule.id).subscribe({
+      next: () => {
+        this.flash('success', 'Rule deleted');
+        this.loadRules();
+      },
+      error: (err) => this.flash('error', err.message || 'Delete failed')
+    });
+  }
+
+  loadBudgets() {
+    const month = new Date().toISOString().slice(0, 7);
+    this.budgetForm.period_month = this.budgetForm.period_month || month;
+    this.bankingService.getBudgetStatus(month).subscribe({
+      next: (rows) => (this.budgets = rows),
+      error: () => (this.budgets = [])
+    });
+  }
+
+  saveBudget() {
+    if (!this.budgetForm.category || !this.budgetForm.amount) {
+      this.flash('error', 'Category and amount required');
+      return;
+    }
+    this.bankingService.saveBudget(this.budgetForm).subscribe({
+      next: () => {
+        this.flash('success', 'Budget saved');
+        this.budgetForm = {
+          category: '',
+          amount: 0,
+          period_month: new Date().toISOString().slice(0, 7)
+        };
+        this.loadBudgets();
+      },
+      error: (err) => this.flash('error', err.message || 'Budget save failed')
+    });
+  }
+
+  deleteBudget(b: BankBudget) {
+    if (!b.id || !confirm(`Delete budget for ${b.category}?`)) return;
+    this.bankingService.deleteBudget(b.id).subscribe({
+      next: () => {
+        this.loadBudgets();
+        this.flash('success', 'Budget deleted');
+      },
+      error: (err) => this.flash('error', err.message || 'Delete failed')
+    });
+  }
+
+  loadInsights() {
+    const accountId = this.filterAccountId ? Number(this.filterAccountId) : undefined;
+    this.bankingService.getRecurring(accountId).subscribe({
+      next: (rows) => (this.recurring = rows),
+      error: () => (this.recurring = [])
+    });
+    this.bankingService.getForecast(accountId).subscribe({
+      next: (data) => (this.forecast = data),
+      error: () => (this.forecast = null)
+    });
+  }
+
+  runTransferMatch() {
+    this.bankingService.matchTransfers().subscribe({
+      next: (r) => {
+        this.flash('success', `Matched ${r.matched} cross-account transfers`);
+        this.loadAnalytics();
+        this.loadTransactions();
+      },
+      error: (err) => this.flash('error', err.message || 'Transfer match failed')
+    });
+  }
+
+  checkContinuity() {
+    if (!this.continuityAccountId) {
+      this.flash('error', 'Select an account');
+      return;
+    }
+    this.bankingService.getContinuity(Number(this.continuityAccountId)).subscribe({
+      next: (data) => {
+        this.continuity = data;
+        this.flash(
+          data.gaps?.length ? 'info' : 'success',
+          data.gaps?.length
+            ? `Found ${data.gaps.length} balance gaps (showing up to 100)`
+            : 'Balance continuity looks good'
+        );
+      },
+      error: (err) => this.flash('error', err.message || 'Continuity check failed')
+    });
+  }
+
+  undoLastImport() {
+    const batchId = this.lastImportResult?.import_batch_id;
+    if (!batchId) {
+      this.flash('error', 'No recent import batch to undo');
+      return;
+    }
+    if (!confirm(`Undo import batch ${batchId}? This deletes all transactions from that import.`)) return;
+    this.bankingService.undoImportBatch(batchId).subscribe({
+      next: (r) => {
+        this.flash('success', `Removed ${r.deleted} transactions from batch`);
+        this.lastImportResult = null;
+        this.refreshAll();
+        this.loadTransactions();
+      },
+      error: (err) => this.flash('error', err.message || 'Undo failed')
+    });
+  }
+
+  onFileSelected(event: Event) {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0] || null;
+    if (file && /\.pdf$/i.test(file.name)) {
+      this.importFile = null;
+      input.value = '';
+      this.flash('error', 'PDF is not supported. Export as CSV or Excel and upload that.');
+      return;
+    }
+    this.importFile = file;
+    this.importPreview = null;
+    this.lastImportResult = null;
   }
 
   exportCsv() {
@@ -822,13 +1067,6 @@ export class BankingComponent implements OnInit {
     });
   }
 
-  onFileSelected(event: Event) {
-    const input = event.target as HTMLInputElement;
-    this.importFile = input.files?.[0] || null;
-    this.importPreview = null;
-    this.lastImportResult = null;
-  }
-
   previewImport() {
     if (!this.importFile) {
       this.flash('error', 'Choose a statement file first');
@@ -873,10 +1111,11 @@ export class BankingComponent implements OnInit {
       next: (data) => {
         this.lastImportResult = data;
         this.importing = false;
-        this.flash(
-          'success',
-          `Imported ${data.inserted} new · skipped ${data.skipped} duplicates · parsed ${data.parsed}`
-        );
+        let msg = `Imported ${data.inserted} new · skipped ${data.skipped} duplicates · parsed ${data.parsed}`;
+        if (data.opening_warning) {
+          msg += ` · opening balance may not match first statement balance`;
+        }
+        this.flash('success', msg);
         this.refreshAll();
         this.loadTransactions();
       },
@@ -923,10 +1162,16 @@ export class BankingComponent implements OnInit {
 
   recategorize() {
     this.bankingService
-      .recategorize(this.filterAccountId ? Number(this.filterAccountId) : undefined)
+      .recategorize(
+        this.filterAccountId ? Number(this.filterAccountId) : undefined,
+        this.recategorizeMode
+      )
       .subscribe({
         next: (n) => {
-          this.flash('success', `Auto-categorized ${n} transactions`);
+          this.flash(
+            'success',
+            `Auto-categorized ${n} transactions (${this.recategorizeMode.replace('_', ' ')})`
+          );
           this.loadTransactions();
           this.loadAnalytics();
         },
@@ -946,12 +1191,25 @@ export class BankingComponent implements OnInit {
   }
 
   totalBalance(): number {
-    return this.accounts.reduce((s, a) => s + (Number(a.latest_balance) || 0), 0);
+    return this.activeAccounts.reduce((s, a) => s + (Number(a.latest_balance) || 0), 0);
+  }
+
+  currencySymbol(currency?: string | null): string {
+    const c = (currency || 'INR').toUpperCase();
+    if (c === 'INR') return '₹';
+    if (c === 'USD') return '$';
+    if (c === 'EUR') return '€';
+    if (c === 'GBP') return '£';
+    return c + ' ';
   }
 
   formatMoney(value: any): string {
     const n = Number(value) || 0;
     return n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  formatCurrency(value: any, currency?: string | null): string {
+    return `${this.currencySymbol(currency)}${this.formatMoney(value)}`;
   }
 
   formatPct(value: any): string {

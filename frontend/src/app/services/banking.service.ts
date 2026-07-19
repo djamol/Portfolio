@@ -37,12 +37,38 @@ export interface BankTransaction {
   deposit: number;
   balance?: number | null;
   category?: string | null;
+  category_source?: string | null;
+  payee?: string | null;
   txn_type?: string | null;
   tags?: string | null;
   notes?: string | null;
+  import_batch_id?: string | null;
+  linked_transfer_id?: number | null;
   bank_name?: string;
   account_name?: string;
   account_number?: string;
+}
+
+export interface CategoryRule {
+  id?: number;
+  pattern: string;
+  match_field?: string;
+  category: string;
+  priority?: number;
+  account_id?: number | null;
+  is_active?: number | boolean;
+}
+
+export interface BankBudget {
+  id?: number;
+  category: string;
+  amount: number;
+  period_month?: string | null;
+  account_id?: number | null;
+  notes?: string | null;
+  spent?: number;
+  remaining?: number;
+  pct?: number;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -99,6 +125,12 @@ export class BankingService {
     );
   }
 
+  createTransaction(data: Partial<BankTransaction>): Observable<BankTransaction | null> {
+    return this.http.post<ApiResponse<BankTransaction>>(`${this.getApiUrl()}/transactions`, data).pipe(
+      map((r) => (r.success ? r.data : null))
+    );
+  }
+
   updateTransaction(id: number, data: Partial<BankTransaction>): Observable<BankTransaction | null> {
     return this.http.put<ApiResponse<BankTransaction>>(`${this.getApiUrl()}/transactions/${id}`, data).pipe(
       map((r) => (r.success ? r.data : null))
@@ -112,15 +144,27 @@ export class BankingService {
   }
 
   bulkCategorize(ids: number[], category: string): Observable<number> {
-    return this.http.post<ApiResponse<{ updated: number }>>(`${this.getApiUrl()}/transactions/bulk-categorize`, { ids, category }).pipe(
-      map((r) => r.data?.updated || 0)
-    );
+    return this.http
+      .post<ApiResponse<{ updated: number }>>(`${this.getApiUrl()}/transactions/bulk-categorize`, {
+        ids,
+        category
+      })
+      .pipe(map((r) => r.data?.updated || 0));
   }
 
-  recategorize(accountId?: number): Observable<number> {
-    return this.http.post<ApiResponse<{ updated: number }>>(`${this.getApiUrl()}/recategorize`, { account_id: accountId }).pipe(
-      map((r) => r.data?.updated || 0)
-    );
+  bulkDelete(ids: number[]): Observable<number> {
+    return this.http
+      .post<ApiResponse<{ deleted: number }>>(`${this.getApiUrl()}/transactions/bulk-delete`, { ids })
+      .pipe(map((r) => r.data?.deleted || 0));
+  }
+
+  recategorize(accountId?: number, mode: string = 'auto_only'): Observable<number> {
+    return this.http
+      .post<ApiResponse<{ updated: number }>>(`${this.getApiUrl()}/recategorize`, {
+        account_id: accountId,
+        mode
+      })
+      .pipe(map((r) => r.data?.updated || 0));
   }
 
   getAnalytics(filters: Record<string, any> = {}): Observable<any> {
@@ -137,6 +181,86 @@ export class BankingService {
     return this.http.get<ApiResponse<string[]>>(`${this.getApiUrl()}/categories`).pipe(
       map((r) => (r.success ? r.data : []))
     );
+  }
+
+  getRules(): Observable<CategoryRule[]> {
+    return this.http.get<ApiResponse<CategoryRule[]>>(`${this.getApiUrl()}/rules`).pipe(
+      map((r) => (r.success ? r.data : []))
+    );
+  }
+
+  createRule(data: CategoryRule): Observable<CategoryRule | null> {
+    return this.http.post<ApiResponse<CategoryRule>>(`${this.getApiUrl()}/rules`, data).pipe(
+      map((r) => (r.success ? r.data : null))
+    );
+  }
+
+  updateRule(id: number, data: CategoryRule): Observable<CategoryRule | null> {
+    return this.http.put<ApiResponse<CategoryRule>>(`${this.getApiUrl()}/rules/${id}`, data).pipe(
+      map((r) => (r.success ? r.data : null))
+    );
+  }
+
+  deleteRule(id: number): Observable<boolean> {
+    return this.http.delete<ApiResponse<any>>(`${this.getApiUrl()}/rules/${id}`).pipe(
+      map((r) => !!r.success)
+    );
+  }
+
+  getBudgetStatus(periodMonth?: string): Observable<BankBudget[]> {
+    let params = new HttpParams();
+    if (periodMonth) params = params.set('period_month', periodMonth);
+    return this.http.get<ApiResponse<BankBudget[]>>(`${this.getApiUrl()}/budgets/status`, { params }).pipe(
+      map((r) => (r.success ? r.data : []))
+    );
+  }
+
+  saveBudget(data: BankBudget): Observable<BankBudget | null> {
+    return this.http.post<ApiResponse<BankBudget>>(`${this.getApiUrl()}/budgets`, data).pipe(
+      map((r) => (r.success ? r.data : null))
+    );
+  }
+
+  deleteBudget(id: number): Observable<boolean> {
+    return this.http.delete<ApiResponse<any>>(`${this.getApiUrl()}/budgets/${id}`).pipe(
+      map((r) => !!r.success)
+    );
+  }
+
+  getRecurring(accountId?: number): Observable<any[]> {
+    let params = new HttpParams();
+    if (accountId) params = params.set('account_id', String(accountId));
+    return this.http.get<ApiResponse<any[]>>(`${this.getApiUrl()}/recurring`, { params }).pipe(
+      map((r) => (r.success ? r.data : []))
+    );
+  }
+
+  matchTransfers(): Observable<{ matched: number }> {
+    return this.http.post<ApiResponse<{ matched: number }>>(`${this.getApiUrl()}/transfers/match`, {}).pipe(
+      map((r) => r.data || { matched: 0 })
+    );
+  }
+
+  getForecast(accountId?: number): Observable<any> {
+    let params = new HttpParams();
+    if (accountId) params = params.set('account_id', String(accountId));
+    return this.http.get<ApiResponse<any>>(`${this.getApiUrl()}/forecast`, { params }).pipe(
+      map((r) => (r.success ? r.data : null))
+    );
+  }
+
+  getContinuity(accountId: number): Observable<any> {
+    return this.http.get<ApiResponse<any>>(`${this.getApiUrl()}/accounts/${accountId}/continuity`).pipe(
+      map((r) => (r.success ? r.data : null))
+    );
+  }
+
+  undoImportBatch(batchId: string): Observable<{ deleted: number; found: number }> {
+    return this.http
+      .delete<ApiResponse<{ deleted: number; found: number }>>(
+        `${this.getApiUrl()}/import/batches/${batchId}`
+      )
+      .pipe(map((r) => r.data || { deleted: 0, found: 0 }));
   }
 
   importStatement(accountId: number, file: File, bankHint?: string): Observable<any> {

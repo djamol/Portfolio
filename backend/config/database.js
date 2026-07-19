@@ -209,12 +209,15 @@ const createTables = async () => {
         deposit DECIMAL(15, 2) NOT NULL DEFAULT 0,
         balance DECIMAL(15, 2) NULL,
         category VARCHAR(100) NULL,
+        category_source VARCHAR(16) DEFAULT 'auto',
+        payee VARCHAR(255) NULL,
         txn_type VARCHAR(32) NULL,
         fingerprint CHAR(64) NOT NULL,
         raw_bank VARCHAR(32) NULL,
         tags VARCHAR(255) NULL,
         notes TEXT,
         import_batch_id VARCHAR(64) NULL,
+        linked_transfer_id INT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         FOREIGN KEY (account_id) REFERENCES bank_accounts(id) ON DELETE CASCADE,
@@ -222,9 +225,60 @@ const createTables = async () => {
         INDEX idx_bank_txn_date (txn_date),
         INDEX idx_bank_txn_account (account_id),
         INDEX idx_bank_txn_category (category),
-        INDEX idx_bank_txn_type (txn_type)
+        INDEX idx_bank_txn_type (txn_type),
+        INDEX idx_bank_txn_payee (payee),
+        INDEX idx_bank_txn_batch (import_batch_id)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     `);
+
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS bank_category_rules (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        pattern VARCHAR(255) NOT NULL,
+        match_field VARCHAR(32) NOT NULL DEFAULT 'narration',
+        category VARCHAR(100) NOT NULL,
+        priority INT NOT NULL DEFAULT 100,
+        account_id INT NULL,
+        is_active TINYINT(1) DEFAULT 1,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_bank_rule_priority (priority),
+        INDEX idx_bank_rule_account (account_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS bank_budgets (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        category VARCHAR(100) NOT NULL,
+        amount DECIMAL(15, 2) NOT NULL,
+        period_month CHAR(7) NULL,
+        account_id INT NULL,
+        notes VARCHAR(255) NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_bank_budget_month (period_month),
+        INDEX idx_bank_budget_category (category)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+
+    // Migrate existing installs: add new columns if missing
+    const alterStatements = [
+      'ALTER TABLE bank_transactions ADD COLUMN category_source VARCHAR(16) DEFAULT \'auto\'',
+      'ALTER TABLE bank_transactions ADD COLUMN payee VARCHAR(255) NULL',
+      'ALTER TABLE bank_transactions ADD COLUMN linked_transfer_id INT NULL',
+      'ALTER TABLE bank_transactions ADD INDEX idx_bank_txn_payee (payee)',
+      'ALTER TABLE bank_transactions ADD INDEX idx_bank_txn_batch (import_batch_id)'
+    ];
+    for (const sql of alterStatements) {
+      try {
+        await connection.query(sql);
+      } catch (err) {
+        // Duplicate column / duplicate key name
+        if (err && (err.code === 'ER_DUP_FIELDNAME' || err.code === 'ER_DUP_KEYNAME')) continue;
+        throw err;
+      }
+    }
 
     logger.info('MySQL: tables ready');
   } catch (error) {

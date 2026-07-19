@@ -8,7 +8,9 @@ const TABLES = [
   'investment_history',
   'investment_transactions',
   'bank_accounts',
-  'bank_transactions'
+  'bank_transactions',
+  'bank_category_rules',
+  'bank_budgets'
 ];
 
 function escapeSqlValue(value) {

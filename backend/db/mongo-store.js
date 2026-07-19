@@ -357,6 +357,8 @@ async function clearAllCollections() {
   const db = getDb();
   // Child collections first (bank_transactions before bank_accounts)
   const collections = [
+    'bank_budgets',
+    'bank_category_rules',
     'bank_transactions',
     'investment_transactions',
     'investment_history',
