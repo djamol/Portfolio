@@ -10,9 +10,70 @@ const DESTRUCTIVE_PATTERNS = [
 ];
 
 function stripSqlComments(sql) {
-  return sql
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/--.*$/gm, '');
+  // Strip comments without touching content inside string literals
+  // (bank narrations may contain "--" or "/* */" sequences).
+  let out = '';
+  let inSingleQuote = false;
+  let inDoubleQuote = false;
+  let escaped = false;
+
+  for (let i = 0; i < sql.length; i++) {
+    const char = sql[i];
+    const next = sql[i + 1];
+
+    if (escaped) {
+      out += char;
+      escaped = false;
+      continue;
+    }
+
+    if (char === '\\' && (inSingleQuote || inDoubleQuote)) {
+      out += char;
+      escaped = true;
+      continue;
+    }
+
+    if (char === "'" && !inDoubleQuote) {
+      if (inSingleQuote && next === "'") {
+        out += "''";
+        i++;
+        continue;
+      }
+      inSingleQuote = !inSingleQuote;
+      out += char;
+      continue;
+    }
+
+    if (char === '"' && !inSingleQuote) {
+      if (inDoubleQuote && next === '"') {
+        out += '""';
+        i++;
+        continue;
+      }
+      inDoubleQuote = !inDoubleQuote;
+      out += char;
+      continue;
+    }
+
+    if (!inSingleQuote && !inDoubleQuote) {
+      if (char === '-' && next === '-') {
+        i += 2;
+        while (i < sql.length && sql[i] !== '\n') i++;
+        if (i < sql.length) out += '\n';
+        continue;
+      }
+      if (char === '/' && next === '*') {
+        i += 2;
+        while (i + 1 < sql.length && !(sql[i] === '*' && sql[i + 1] === '/')) i++;
+        i += 1; // skip closing /
+        continue;
+      }
+    }
+
+    out += char;
+  }
+
+  return out;
 }
 
 function splitSqlStatements(sql) {
@@ -202,5 +263,7 @@ async function importDatabaseSql(pool, sqlText, { freshInstall = false } = {}) {
 
 module.exports = {
   clearAllTables,
-  importDatabaseSql
+  importDatabaseSql,
+  stripSqlComments,
+  splitSqlStatements
 };

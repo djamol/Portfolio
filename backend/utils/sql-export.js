@@ -100,9 +100,7 @@ async function exportDatabaseSql(pool) {
 
     counts[table] = rows.length;
     lines.push(`-- Table: ${table} (${rows.length} rows)`);
-    lines.push(`LOCK TABLES \`${table}\` WRITE;`);
     lines.push(buildInsertStatement(table, rows).trimEnd());
-    lines.push('UNLOCK TABLES;');
     lines.push('');
   }
 
