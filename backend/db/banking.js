@@ -140,50 +140,54 @@ async function mysqlImportTransactions(accountId, transactions, importBatchId) {
   return { inserted, skipped, total: transactions.length, import_batch_id: importBatchId };
 }
 
-function buildTxnWhere(filters = {}) {
+function buildTxnWhere(filters = {}, table = 'bank_transactions') {
+  const col = (name) => `${table}.${name}`;
   const where = ['1=1'];
   const params = [];
+  // Qualify columns: list query JOINs bank_accounts which also has notes
   if (filters.account_id) {
-    where.push('account_id = ?');
+    where.push(`${col('account_id')} = ?`);
     params.push(Number(filters.account_id));
   }
   if (filters.from) {
-    where.push('txn_date >= ?');
+    where.push(`${col('txn_date')} >= ?`);
     params.push(filters.from);
   }
   if (filters.to) {
-    where.push('txn_date <= ?');
+    where.push(`${col('txn_date')} <= ?`);
     params.push(filters.to);
   }
   if (filters.category) {
-    where.push('category = ?');
+    where.push(`${col('category')} = ?`);
     params.push(filters.category);
   }
   if (filters.txn_type) {
-    where.push('txn_type = ?');
+    where.push(`${col('txn_type')} = ?`);
     params.push(filters.txn_type);
   }
   if (filters.q) {
-    where.push('(narration LIKE ? OR ref_no LIKE ? OR notes LIKE ? OR payee LIKE ? OR tags LIKE ?)');
+    where.push(
+      `(${col('narration')} LIKE ? OR ${col('ref_no')} LIKE ? OR ${col('notes')} LIKE ? OR ${col('payee')} LIKE ? OR ${col('tags')} LIKE ?)`
+    );
     const like = `%${filters.q}%`;
     params.push(like, like, like, like, like);
   }
   if (filters.payee) {
-    where.push('payee LIKE ?');
+    where.push(`${col('payee')} LIKE ?`);
     params.push(`%${filters.payee}%`);
   }
   if (filters.min_amount) {
-    where.push('(withdrawal >= ? OR deposit >= ?)');
+    where.push(`(${col('withdrawal')} >= ? OR ${col('deposit')} >= ?)`);
     params.push(num(filters.min_amount), num(filters.min_amount));
   }
-  if (filters.flow === 'debit') where.push('withdrawal > 0');
-  if (filters.flow === 'credit') where.push('deposit > 0');
+  if (filters.flow === 'debit') where.push(`${col('withdrawal')} > 0`);
+  if (filters.flow === 'credit') where.push(`${col('deposit')} > 0`);
   return { whereSql: where.join(' AND '), params };
 }
 
 async function mysqlGetTransactions(filters = {}) {
   const pool = getPool();
-  const { whereSql, params } = buildTxnWhere(filters);
+  const { whereSql, params } = buildTxnWhere(filters, 't');
   const limit = Math.min(Number(filters.limit) || 100, 5000);
   const offset = Math.max(Number(filters.offset) || 0, 0);
   const sort = String(filters.sort || 'date_desc');
@@ -219,10 +223,10 @@ async function mysqlGetTransactions(filters = {}) {
   const [countRows] = await pool.query(
     `SELECT
       COUNT(*) AS total,
-      COALESCE(SUM(withdrawal),0) AS total_debit,
-      COALESCE(SUM(deposit),0) AS total_credit,
-      COALESCE(SUM(deposit) - SUM(withdrawal),0) AS net_cashflow
-     FROM bank_transactions WHERE ${whereSql}`,
+      COALESCE(SUM(t.withdrawal),0) AS total_debit,
+      COALESCE(SUM(t.deposit),0) AS total_credit,
+      COALESCE(SUM(t.deposit) - SUM(t.withdrawal),0) AS net_cashflow
+     FROM bank_transactions t WHERE ${whereSql}`,
     params
   );
   const totals = countRows[0];
