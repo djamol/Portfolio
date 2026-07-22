@@ -1,0 +1,87 @@
+---
+description: Full API catalog — endpoint → file for instant jumps
+alwaysApply: true
+---
+
+# API catalog
+
+Base: `{apiDomain}/api`. Response shape usually `{ success, data, error? }`. Banking list meta: `{ total, limit, offset, total_debit, total_credit, net_cashflow }`.
+
+## Health / config
+
+| Method | Path | File |
+|--------|------|------|
+| GET | `/health` | `server.js` |
+| GET | `/config` | `routes/config.js` → ignorePlatforms |
+
+## Investments — `routes/investments.js` + `db/*-store.js`
+
+| Method | Path | Notes |
+|--------|------|-------|
+| GET | `/investments` | all |
+| GET | `/investments/search?website_app_name&sub_type_name&sub_type_category` | |
+| GET/PUT/DELETE | `/investments/:id` | |
+| POST | `/investments` | body fields as domain model |
+
+## Analytics — `routes/analytics.js`
+
+MySQL path uses pool + `ignore-platform` + often `snapshot-queries`. Mongo → `utils/mongo-analytics.js`.
+
+| GET path | Purpose |
+|----------|---------|
+| `/analytics/total` | sum + count |
+| `/analytics/by-type` | group investment_type |
+| `/analytics/by-month` / `by-year` | time buckets |
+| `/analytics/monthly-changes` / `yearly-changes` | deltas |
+| `/analytics/by-platform` | by website_app_name |
+| `/analytics/growth` | growth series |
+| `/analytics/value-series` | portfolio value over time (filters) |
+| `/analytics/allocation-latest` | latest allocation |
+| `/analytics/insights` | derived insights |
+| `/analytics/delta?from&to` | period delta |
+| `/analytics/cashflows-by-month` | investment_transactions |
+| `/analytics/by-sub-type-name` / `by-sub-type-category` | |
+| `/analytics/summary-table` | summary rows |
+| `/analytics/investment-history/:id` | history |
+
+## Categories — `routes/categories.js` + store
+
+| Method | Path |
+|--------|------|
+| GET/POST | `/categories/sub-type-names` |
+| GET | `/categories/sub-type-names/:investmentType` |
+| DELETE | `/categories/sub-type-names/:id` |
+| POST | `/categories/categories` |
+| GET | `/categories/categories/:investmentType/:subTypeNameId?` |
+| DELETE | `/categories/categories/:id` |
+| POST | `/categories/sync-from-investments` | → `sync-lookup-tables.js` |
+
+## Portfolio import/export — `routes/portfolio.js`
+
+| Method | Path | Util |
+|--------|------|------|
+| GET | `/portfolio/export` | JSON investments |
+| POST | `/portfolio/import` | upsert array via store |
+| GET | `/portfolio/export/sql` | `sql-export.js` (Mongo→SQL too) |
+| POST | `/portfolio/import/sql` | MySQL only; body `{ sql, freshInstall? }` |
+| GET | `/portfolio/export/mongo` | `mongo-export.js` |
+| POST | `/portfolio/import/mongo` | body `{ data, freshInstall? }` |
+
+## Banking — `routes/banking.js` + `db/banking.js` + `banking-advanced.js`
+
+| Area | Paths |
+|------|-------|
+| Accounts | CRUD `/banking/accounts`, `/banking/accounts/:id` |
+| Continuity | GET `/banking/accounts/:id/continuity` |
+| Txns | CRUD `/banking/transactions`; POST `bulk-categorize`, `bulk-delete` |
+| Recat | POST `/banking/recategorize` |
+| Categories | GET `/banking/categories` |
+| Rules | CRUD `/banking/rules` |
+| Analytics | GET `/banking/analytics` |
+| Budgets | `/banking/budgets`, `/budgets/status`, DELETE `/budgets/:id` |
+| Recurring | GET `/banking/recurring` |
+| Transfers | POST `/banking/transfers/match` |
+| Forecast | GET `/banking/forecast` |
+| Import | POST `/banking/import` (multer file), `/import/preview`; DELETE `/import/batches/:batchId` |
+
+Parsers: `utils/bank-parsers/index.js` — HDFC/ICICI/DCB/SBI/Axis/Kotak + generic; **no PDF**.

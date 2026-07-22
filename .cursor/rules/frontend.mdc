@@ -1,0 +1,53 @@
+---
+description: Angular FE patterns — routes, services, auth, charts
+globs: frontend/src/**/*.{ts,html,css}
+alwaysApply: false
+---
+
+# Frontend conventions
+
+## App shell
+
+- NgModule app (`app.module.ts`); charts via `NgChartsModule`.
+- Router: `RouterModule.forRoot(routes, { useHash: true })` — URLs like `/#/dashboard`.
+- Most routes `canActivate: [authGuard]` except `/login`.
+
+## Auth / API host
+
+- Login stores `isLoggedIn=true`, `apiDomain`, `loginTime` in localStorage (`auth.service.ts`).
+- All HTTP uses `getApiBaseUrl()` → `{apiDomain}/api` (`api-url.util.ts`).
+- No real password auth — domain picker only.
+
+## UI → service map
+
+| Component | Primary service(s) |
+|-----------|-------------------|
+| `dashboard/` | analytics, investment, config |
+| `investment-list/` | investment, category |
+| `investment-form/` | investment, category |
+| `analytics/` | analytics (+ filters) |
+| `asset-tracker/` | investment / analytics |
+| `investment-summary/` | analytics |
+| `import-data/` | portfolio endpoints via investment/portfolio calls in component |
+| `import-export/` | `/api/portfolio/export|import/*` |
+| `banking/` | `banking.service.ts` |
+| `login/` | `auth.service.ts` |
+| `multi-select-filter/` | shared input; used by list/analytics |
+
+## Services (files)
+
+`investment`, `analytics`, `banking`, `category`, `config`, `auth` under `services/`.
+
+Analytics filters type lives in `analytics.service.ts` (`AnalyticsFilters`, series/allocation/delta/insights types).
+
+## Constants / utils
+
+- Types list: `constants/investment-types.constants.ts` (keep in sync with DB ENUM when adding types; note DB has **EPF**).
+- Platform ignore: `ignore-platform.util.ts` + `config.service.ts` loads `/api/config`.
+- Filters: `advanced-filter.util.ts`. Numbers: `indian-number.util.ts`.
+
+## Edit rules
+
+- Colocate `*.ts` / `*.html` / `*.css` per component.
+- Don't touch `frontend/.angular/` or generated `dist`.
+- Prefer existing FormsModule patterns (template-driven) unless file already differs.

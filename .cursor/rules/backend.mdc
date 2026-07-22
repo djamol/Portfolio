@@ -1,0 +1,52 @@
+---
+description: Backend Express/DB patterns, schema, dual-impl rules
+globs: backend/**/*.{js,mjs,cjs}
+alwaysApply: false
+---
+
+# Backend conventions
+
+## Layering
+
+`routes/` validate + HTTP status → `db/` or `utils/` for logic. Keep `{ success, data|error }` JSON.
+
+## Config
+
+`require('../config/index')`: `isMongoDb()`, `getPool()` (mysql only), `getMongoDb()` (mongo only), `initializeDatabase()` on boot (`server.js`).
+
+## Schema (MySQL — source of truth in `config/database.js`)
+
+Tables: `investments`, `investment_history`, `sub_type_names`, `sub_type_categories`, `investment_transactions`, `bank_accounts`, `bank_transactions`, `bank_category_rules`, `bank_budgets`.
+
+Investment key fields: `website_app_name`, `investment_type`, `sub_type_name`, `sub_type_category`, `amount`, `investment_date`, `notes`.
+
+Bank txn uniqueness: `(account_id, fingerprint)`. Import undo via `import_batch_id`.
+
+Mongo: parallel collections + counters in `mongo-store` / banking mongo_* funcs; IDs via `nextId`.
+
+## Store API (`db/*-store.js`)
+
+`getAllInvestments`, `searchInvestments`, `getInvestmentById`, `createInvestment`, `updateInvestment`, `deleteInvestment`, lookup CRUD, `upsertImportedInvestment`, `findInvestmentByKey`.
+
+History written on amount changes (create/update/delete patterns in store).
+
+## Analytics
+
+- Simple aggregates: often inline in `routes/analytics.js` with `appendIgnorePlatformClause`.
+- As-of / filtered series: `utils/snapshot-queries.js` (`amountAsOfSubquery`, filter builders, `resolveSeriesBreakdown`).
+- Mongo: mirror in `utils/mongo-analytics.js` — keep behavior aligned when editing.
+
+## Banking
+
+- Core: `db/banking.js` (accounts, txns, import, analytics, fingerprints).
+- Advanced: `db/banking-advanced.js` spread into banking exports (rules, budgets, recurring, transfers, forecast, continuity, bulk-delete, undo batch).
+- Parse entry: `parseBankStatement` from `utils/bank-parsers` (hint or auto-detect; PDF rejected).
+- Upload: multer memory, 40MB, field `file`.
+
+## Logging
+
+Prefer `utils/logger.js`. Some routes still use `console.error` — match nearby style when touching a file.
+
+## Env
+
+Do not hardcode credentials. Document new vars in root `.env.example`.

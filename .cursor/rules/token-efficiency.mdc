@@ -1,0 +1,42 @@
+---
+description: Feature → files cheat sheet; skip noise; low-token habits
+alwaysApply: true
+---
+
+# Token efficiency (deep)
+
+Trust project-map + api-catalog. Open mapped files first. Prefer Grep with path scope over repo-wide explore.
+
+## Never scan unless asked
+
+`node_modules/`, `frontend/.angular/`, `data/`, `*.sql`, `*.csv`, `*.mongo.json`, `package-lock.json`, `__pycache__/`, build `dist/`/`public/` artifacts.
+
+## Feature → start files
+
+| Task | Open these |
+|------|------------|
+| Investment list/CRUD UI | `components/investment-list/`, `investment-form/`, `services/investment.service.ts` |
+| Investment API/DB | `routes/investments.js`, `db/mysql-store.js` **and** `mongo-store.js` if dual-DB |
+| Dashboard | `components/dashboard/`, analytics + investment services |
+| Charts / allocation / insights | `components/analytics/`, `analytics.service.ts`, `routes/analytics.js`, `utils/snapshot-queries.js` or `mongo-analytics.js` |
+| Asset tracker | `components/asset-tracker/` |
+| Summary table UI | `components/investment-summary/` |
+| JSON import UI | `components/import-data/` |
+| SQL/Mongo backup UI | `components/import-export/`, `routes/portfolio.js`, `utils/sql-*` / `mongo-*` |
+| Banking UI | `components/banking/`, `banking.service.ts` |
+| Bank statement parse | `utils/bank-parsers/index.js` + bank file; import route in `routes/banking.js` |
+| Bank rules/budgets/forecast | `db/banking-advanced.js` |
+| Ignore platforms | `.env` `IGNORE_PLATFORM`, `utils/ignore-platform.js`, FE `ignore-platform.util.ts`, `config.service.ts` |
+| Login / API host | `components/login/`, `auth.service.ts`, `api-url.util.ts`, `guards/auth.guard.ts` |
+| Investment type enums | FE `constants/investment-types.constants.ts`; BE ENUM in `config/database.js` |
+| Lookup sync | `routes/categories.js`, `utils/sync-lookup-tables.js`, `scripts/sync-lookup-from-investments.js` |
+| Docker/deploy | `Dockerfile`, `docker-compose.yml`, `frontend/nginx.conf` |
+| Migrations (offline) | `scripts/*.py` only |
+
+## Dual-DB edit checklist
+
+If changing investment persistence or analytics: update **both** MySQL and Mongo paths (store pair, or analytics.js branch + mongo-analytics, or banking dual functions).
+
+## Reply style
+
+Cite paths; don't paste whole files. Don't restate this map in answers. No unsolicited README/docs.

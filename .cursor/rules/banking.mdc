@@ -1,0 +1,43 @@
+---
+description: Banking domain — parsers, tables, advanced features
+globs: "{backend/routes/banking.js,backend/db/banking*.js,backend/utils/bank-parsers/**,frontend/src/app/components/banking/**,frontend/src/app/services/banking.service.ts}"
+alwaysApply: false
+---
+
+# Banking deep map
+
+## Flow
+
+UI `banking/` → `banking.service.ts` → `/api/banking/*` → `routes/banking.js` → `db/banking.js` (+ `banking-advanced.js`). Statement upload → `parseBankStatement` → fingerprint dedupe → `importTransactions`.
+
+## Parsers (`utils/bank-parsers/`)
+
+| File | Bank |
+|------|------|
+| `hdfc-csv.js` | HDFC CSV |
+| `icici-xls.js` | ICICI Excel |
+| `dcb-xls.js` | DCB Excel |
+| `sbi.js` | SBI |
+| `axis.js` | Axis |
+| `kotak.js` | Kotak |
+| `cotak-csv.js` | Kotak CSV variant |
+| `generic.js` | Fallback CSV/XLS |
+| `common.js` | `finalizeParsedTxn`, shared categorize |
+| `index.js` | detect order + PDF reject |
+
+Hints: `bankHint` HDFC|ICICI|DCB|SBI|AXIS|KOTAK. Custom rules re-applied after parse.
+
+## Data
+
+- Account: bank_name, account_name, account_number, ifsc, account_type, currency, opening_balance.
+- Txn: txn_date, narration, ref_no, withdrawal/deposit, balance, category, category_source, payee, fingerprint, import_batch_id, linked_transfer_id.
+- Rules: pattern, match_field (default narration), category, priority, optional account_id.
+- Budgets: category, amount, period_month `YYYY-MM`.
+
+## Advanced (`banking-advanced.js`)
+
+Category rules CRUD, bulk delete, undo import batch, manual create txn, balance continuity, budgets/status, recurring detection, transfer matching (windowDays), cash forecast.
+
+## FE service methods
+
+Accounts/txns CRUD, bulk categorize, analytics, categories, rules, budget status, recurring, forecast, continuity — mirror route names in `banking.service.ts`.

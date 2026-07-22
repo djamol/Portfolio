@@ -1,0 +1,91 @@
+---
+description: Deep project map — stack, layout, domain, API, UI, dual-DB
+alwaysApply: true
+---
+
+# Portfolio — deep map
+
+Full-stack **portfolio + banking** app. Angular 17 FE + Express BE. DB via `DB_TYPE`: `mysql` (default) | `mongodb`. Hash routing (`useHash: true`). Auth = localStorage flag + API domain (no JWT).
+
+## Top-level
+
+```
+backend/          Express API (server.js → routes → db/utils)
+frontend/src/app/ Angular UI (components/services/utils/guards/constants)
+scripts/          Python one-off migrations (excel/sql/mongo)
+data/             Backups/samples — IGNORE unless asked
+docker-compose.yml  mysql + mongo + app
+Dockerfile        Multi-stage: ng build → serve from backend/public
+.env.example      Root env template
+```
+
+## Backend layout
+
+| Path | Job |
+|------|-----|
+| `server.js` | CORS, JSON 50mb, HTTP log, `/api/health`, mount routes, static `/public` |
+| `config/index.js` | `DB_TYPE` switch; `getPool()` / `getMongoDb()` / `initializeDatabase()` |
+| `config/database.js` | MySQL pool + CREATE TABLE migrations |
+| `config/mongodb.js` | Mongo client + collections bootstrap |
+| `db/index.js` | Re-exports `mysql-store` or `mongo-store` |
+| `db/mysql-store.js` / `mongo-store.js` | Investment + lookup CRUD + import upsert |
+| `db/banking.js` | Bank accounts/txns/analytics (mysql+mongo dual impl) |
+| `db/banking-advanced.js` | Rules, budgets, recurring, transfers, forecast, continuity |
+| `routes/*.js` | Thin HTTP; business in db/utils |
+| `utils/snapshot-queries.js` | MySQL as-of amount / series / filters for analytics |
+| `utils/mongo-analytics.js` | Mongo twin of analytics aggregations |
+| `utils/ignore-platform.js` | `IGNORE_PLATFORM` env → SQL/filter helpers |
+| `utils/sql-export.js` / `sql-import.js` | Full DB SQL dump/restore |
+| `utils/mongo-export.js` / `mongo-import.js` | Full Mongo JSON dump/restore |
+| `utils/bank-parsers/` | Statement detect+parse by bank |
+| `utils/logger.js` | Structured levels via `LOG_LEVEL` |
+| `utils/sync-lookup-tables.js` | Rebuild sub_type_* from investments |
+| `DirectAdmin_run.js` | Hosting helper (not main app) |
+
+## Frontend layout
+
+| Path | Job |
+|------|-----|
+| `app.routes.ts` | Routes + `authGuard` |
+| `app.module.ts` | NgModule + NgCharts + hash router |
+| `components/<feature>/` | Page UI (ts/html/css) |
+| `components/multi-select-filter/` | Shared multi-select |
+| `services/*.service.ts` | HTTP → `/api/...` |
+| `utils/api-url.util.ts` | `getApiBaseUrl()` from localStorage `apiDomain` |
+| `utils/ignore-platform.util.ts` | Client-side platform exclude |
+| `utils/advanced-filter.util.ts` | List/filter helpers |
+| `utils/indian-number.util.ts` | INR formatting |
+| `constants/investment-types.constants.ts` | Types + default subtypes/categories |
+| `guards/auth.guard.ts` | Gate on `isLoggedIn` |
+
+## Domain model (core fields)
+
+**Investment** (`investments`): `website_app_name`, `investment_type`, `sub_type_name`, `sub_type_category`, `amount`, `investment_date`, `notes`. Required create: platform, type, amount, date.
+
+**Types (ENUM)**: FD, Stock, ETF, Bond, Mutual Fund, Crypto, PPF, EPF, Saving Bank Balance. FE constants omit EPF — DB allows EPF.
+
+**History** (`investment_history`): amount changes (`added|removed|updated`).
+
+**Cashflows** (`investment_transactions`): buy/sell/dividend/interest/fee/deposit/withdrawal/transfer_*.
+
+**Lookups**: `sub_type_names`, `sub_type_categories` (sync via `/api/categories/sync-from-investments`).
+
+**Bank**: `bank_accounts` → `bank_transactions` (fingerprint dedupe, category_source auto|manual, import_batch_id) → `bank_category_rules`, `bank_budgets`.
+
+## Dual-DB rule
+
+- Investments CRUD: `db/index.js` → store.
+- Analytics MySQL: inline SQL in `routes/analytics.js` + `snapshot-queries.js`; Mongo: `mongo-analytics.js`.
+- Banking: `banking.js` / `banking-advanced.js` pick impl by `isMongoDb()`.
+- Never call `getPool()` when `DB_TYPE=mongodb`.
+
+## Env (root `.env` / `.env.example`)
+
+`DB_TYPE`, `DB_HOST/PORT/USER/PASSWORD/NAME`, `MONGODB_URI/DB`, `PORT`, `DB_CONNECT_RETRIES/DELAY_MS`, `LOG_LEVEL`, `IGNORE_PLATFORM` (comma list; case/space-insensitive).
+
+## Run
+
+- Dev BE: `cd backend && npm start` → `:3000`
+- Dev FE: `cd frontend && npm start` → `:4200`
+- Prod Docker: compose or single `Dockerfile` (FE baked into `public/`)
+- Sync lookups: `cd backend && npm run sync-lookups`
