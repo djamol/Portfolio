@@ -11,6 +11,37 @@ function extensionOf(filename = '') {
   return path.extname(filename).toLowerCase();
 }
 
+function normalizeBankHint(bankHint) {
+  const h = String(bankHint || '').toUpperCase().replace(/\s+/g, '');
+  if (!h || h === 'OTHER' || h === 'AUTO') return '';
+  if (h.includes('HDFC')) return 'HDFC';
+  if (h.includes('ICICI')) return 'ICICI';
+  if (h.includes('DCB')) return 'DCB';
+  if (h.includes('SBI') || h.includes('STATEBANK')) return 'SBI';
+  if (h.includes('AXIS')) return 'AXIS';
+  if (h.includes('KOTAK')) return 'KOTAK';
+  return h;
+}
+
+function parseByHint(hint, buffer, accountId, ext, options) {
+  switch (hint) {
+    case 'HDFC':
+      return parseHdfcCsv(buffer, accountId);
+    case 'DCB':
+      return parseDcbXls(buffer, accountId, options);
+    case 'ICICI':
+      return parseIciciXls(buffer, accountId);
+    case 'SBI':
+      return parseSbiStatement(buffer, accountId, ext);
+    case 'AXIS':
+      return parseAxisStatement(buffer, accountId, ext);
+    case 'KOTAK':
+      return parseKotakStatement(buffer, accountId, ext);
+    default:
+      return null;
+  }
+}
+
 function parseBankStatement({ buffer, filename, accountId, bankHint, accountNumber, customRules }) {
   if (!buffer || !buffer.length) {
     throw new Error('Empty file uploaded');
@@ -20,9 +51,10 @@ function parseBankStatement({ buffer, filename, accountId, bankHint, accountNumb
   }
 
   const ext = extensionOf(filename);
-  const hint = String(bankHint || '').toUpperCase();
+  const hint = normalizeBankHint(bankHint);
   const textPreview = buffer.toString('utf8', 0, Math.min(buffer.length, 8000));
   const options = { accountNumber };
+  const isExcel = ext === '.xls' || ext === '.xlsx';
 
   if (ext === '.pdf') {
     throw new Error(
@@ -30,36 +62,41 @@ function parseBankStatement({ buffer, filename, accountId, bankHint, accountNumb
     );
   }
 
-  let result;
-  if (hint === 'HDFC' || (ext === '.csv' && detectHdfc(textPreview))) {
-    result = parseHdfcCsv(buffer, accountId);
-  } else if (hint === 'DCB' || ((ext === '.xls' || ext === '.xlsx') && detectDcb(buffer))) {
-    result = parseDcbXls(buffer, accountId, options);
-  } else if (hint === 'ICICI' || ((ext === '.xls' || ext === '.xlsx') && detectIcici(buffer))) {
-    result = parseIciciXls(buffer, accountId);
-  } else if (hint === 'SBI' || detectSbi(ext === '.csv' ? textPreview : buffer)) {
-    result = parseSbiStatement(buffer, accountId, ext);
-  } else if (hint === 'AXIS' || detectAxis(ext === '.csv' ? textPreview : buffer)) {
-    result = parseAxisStatement(buffer, accountId, ext);
-  } else if (hint === 'KOTAK' || detectKotak(ext === '.csv' ? textPreview : buffer)) {
-    result = parseKotakStatement(buffer, accountId, ext);
-  } else if (ext === '.csv') {
-    if (detectHdfc(textPreview)) result = parseHdfcCsv(buffer, accountId);
-    else result = parseGenericCsv(buffer, accountId);
-  } else if (ext === '.xls' || ext === '.xlsx') {
-    if (detectDcb(buffer)) result = parseDcbXls(buffer, accountId, options);
-    else if (detectIcici(buffer)) result = parseIciciXls(buffer, accountId);
-    else result = parseGenericXls(buffer, accountId);
-  } else {
-    try {
+  let result = parseByHint(hint, buffer, accountId, ext, options);
+
+  if (!result) {
+    if (ext === '.csv' && detectHdfc(textPreview)) {
+      result = parseHdfcCsv(buffer, accountId);
+    } else if (isExcel && detectDcb(buffer)) {
+      result = parseDcbXls(buffer, accountId, options);
+    } else if (isExcel && detectAxis(buffer)) {
+      // Axis before ICICI: both may use OpTransactionHistory sheet name
+      result = parseAxisStatement(buffer, accountId, ext);
+    } else if (isExcel && detectIcici(buffer)) {
+      result = parseIciciXls(buffer, accountId);
+    } else if (detectSbi(ext === '.csv' ? textPreview : buffer)) {
+      result = parseSbiStatement(buffer, accountId, ext);
+    } else if (detectAxis(ext === '.csv' ? textPreview : buffer)) {
+      result = parseAxisStatement(buffer, accountId, ext);
+    } else if (detectKotak(ext === '.csv' ? textPreview : buffer)) {
+      result = parseKotakStatement(buffer, accountId, ext);
+    } else if (ext === '.csv') {
       if (detectHdfc(textPreview)) result = parseHdfcCsv(buffer, accountId);
       else result = parseGenericCsv(buffer, accountId);
-    } catch (csvErr) {
+    } else if (isExcel) {
+      result = parseGenericXls(buffer, accountId);
+    } else {
       try {
-        if (detectDcb(buffer)) result = parseDcbXls(buffer, accountId, options);
-        else result = parseIciciXls(buffer, accountId);
-      } catch {
-        throw new Error(`Unsupported bank statement format: ${csvErr.message}`);
+        if (detectHdfc(textPreview)) result = parseHdfcCsv(buffer, accountId);
+        else result = parseGenericCsv(buffer, accountId);
+      } catch (csvErr) {
+        try {
+          if (detectAxis(buffer)) result = parseAxisStatement(buffer, accountId, '.xls');
+          else if (detectDcb(buffer)) result = parseDcbXls(buffer, accountId, options);
+          else result = parseIciciXls(buffer, accountId);
+        } catch {
+          throw new Error(`Unsupported bank statement format: ${csvErr.message}`);
+        }
       }
     }
   }

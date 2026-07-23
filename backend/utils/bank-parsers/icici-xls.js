@@ -263,13 +263,22 @@ function detectIcici(buffer) {
       .join(' ')
       .toLowerCase();
 
-    if (sheetName.includes('optransactionhistory')) return true;
+    // Axis netbanking also uses OpTransactionHistory — require ICICI markers
+    if (sample.includes('axis bank') || sample.includes('statement of axis account')) return false;
     if (sample.includes('icici')) return true;
     if (sample.includes('transaction remarks') && sample.includes('withdrawal amount')) return true;
     if (sample.includes('particulars') && sample.includes('withdrawals') && sample.includes('deposits')) {
       return true;
     }
     if (sample.includes('statement of transactions in savings account')) return true;
+    if (
+      sheetName.includes('optransactionhistory') &&
+      (sample.includes('transaction remarks') ||
+        sample.includes('withdrawal amount') ||
+        sample.includes('value date'))
+    ) {
+      return true;
+    }
     return false;
   } catch {
     return false;
