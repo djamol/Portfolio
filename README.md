@@ -2,6 +2,8 @@
 
 A full-stack application for managing and analyzing your financial portfolio investments.
 
+Docker Image : `docker pull djamol/portofilio-asset-managment:1.0.0`
+
 ## Features
 
 - ✅ Add, edit, and delete investment records
