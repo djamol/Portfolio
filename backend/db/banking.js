@@ -182,7 +182,76 @@ function buildTxnWhere(filters = {}, table = 'bank_transactions') {
   }
   if (filters.flow === 'debit') where.push(`${col('withdrawal')} > 0`);
   if (filters.flow === 'credit') where.push(`${col('deposit')} > 0`);
+  if (wantsExcludeTransfers(filters)) {
+    where.push(
+      `NOT (${col('category')} IN ('Transfer In','Transfer Out') OR ${col('linked_transfer_id')} IS NOT NULL)`
+    );
+  }
   return { whereSql: where.join(' AND '), params };
+}
+
+function wantsExcludeTransfers(filters = {}) {
+  const v = filters.exclude_transfers;
+  return v === true || v === 1 || v === '1' || v === 'true';
+}
+
+function buildCashSummaryFromAccounts(accounts) {
+  const list = (accounts || []).map((a) => {
+    const isActive = !(a.is_active === 0 || a.is_active === false);
+    const latest =
+      a.latest_balance !== null && a.latest_balance !== undefined
+        ? num(a.latest_balance)
+        : num(a.opening_balance);
+    return {
+      id: a.id,
+      bank_name: a.bank_name,
+      account_name: a.account_name,
+      currency: a.currency || 'INR',
+      latest_balance: latest,
+      is_active: isActive ? 1 : 0
+    };
+  });
+  const totals = {};
+  let active_count = 0;
+  let inactive_count = 0;
+  for (const a of list) {
+    if (a.is_active) {
+      active_count += 1;
+      const c = a.currency || 'INR';
+      totals[c] = (totals[c] || 0) + num(a.latest_balance);
+    } else {
+      inactive_count += 1;
+    }
+  }
+  return {
+    accounts: list,
+    totals_by_currency: Object.entries(totals).map(([currency, total]) => ({ currency, total })),
+    active_count,
+    inactive_count
+  };
+}
+
+async function mysqlGetCashSummary() {
+  return buildCashSummaryFromAccounts(await mysqlGetAccounts());
+}
+
+async function mysqlGetAnalyticsByPayee(filters = {}) {
+  const pool = getPool();
+  const { whereSql, params } = buildTxnWhere(filters);
+  const limit = Math.min(Math.max(Number(filters.limit) || 15, 1), 100);
+  const [rows] = await pool.query(
+    `SELECT COALESCE(NULLIF(TRIM(payee), ''), 'Unknown') AS payee,
+            COUNT(*) AS txn_count,
+            COALESCE(SUM(withdrawal),0) AS total_debit,
+            COALESCE(SUM(deposit),0) AS total_credit
+     FROM bank_transactions
+     WHERE ${whereSql}
+     GROUP BY COALESCE(NULLIF(TRIM(payee), ''), 'Unknown')
+     ORDER BY total_debit DESC, total_credit DESC
+     LIMIT ?`,
+    [...params, limit]
+  );
+  return rows;
 }
 
 async function mysqlGetTransactions(filters = {}) {
@@ -728,6 +797,9 @@ function mongoTxnQuery(filters = {}) {
   }
   if (filters.category) q.category = filters.category;
   if (filters.txn_type) q.txn_type = filters.txn_type;
+  if (filters.payee) {
+    q.payee = new RegExp(String(filters.payee).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+  }
   if (filters.flow === 'debit') q.withdrawal = { $gt: 0 };
   if (filters.flow === 'credit') q.deposit = { $gt: 0 };
   if (filters.min_amount) {
@@ -737,7 +809,40 @@ function mongoTxnQuery(filters = {}) {
     const re = new RegExp(String(filters.q).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
     q.$or = [{ narration: re }, { ref_no: re }, { notes: re }];
   }
+  if (wantsExcludeTransfers(filters)) {
+    q.$and = [
+      ...(q.$and || []),
+      { category: { $nin: ['Transfer In', 'Transfer Out'] } },
+      {
+        $or: [{ linked_transfer_id: null }, { linked_transfer_id: { $exists: false } }]
+      }
+    ];
+  }
   return q;
+}
+
+async function mongoGetCashSummary() {
+  return buildCashSummaryFromAccounts(await mongoGetAccounts());
+}
+
+async function mongoGetAnalyticsByPayee(filters = {}) {
+  const db = getMongoDb();
+  const query = mongoTxnQuery(filters);
+  const limit = Math.min(Math.max(Number(filters.limit) || 15, 1), 100);
+  const rows = await db.collection('bank_transactions').find(query).toArray();
+  const map = {};
+  for (const r of rows) {
+    const payee = String(r.payee || '').trim() || 'Unknown';
+    if (!map[payee]) {
+      map[payee] = { payee, txn_count: 0, total_debit: 0, total_credit: 0 };
+    }
+    map[payee].txn_count += 1;
+    map[payee].total_debit += num(r.withdrawal);
+    map[payee].total_credit += num(r.deposit);
+  }
+  return Object.values(map)
+    .sort((a, b) => b.total_debit - a.total_debit || b.total_credit - a.total_credit)
+    .slice(0, limit);
 }
 
 async function mongoGetTransactions(filters = {}) {
@@ -1053,6 +1158,9 @@ module.exports = {
   bulkCategorize: (...a) => (impl() === 'mongo' ? mongoBulkCategorize(...a) : mysqlBulkCategorize(...a)),
   recategorizeAll: (...a) => (impl() === 'mongo' ? mongoRecategorizeAll(...a) : mysqlRecategorizeAll(...a)),
   getAnalytics: (...a) => (impl() === 'mongo' ? mongoGetAnalytics(...a) : mysqlGetAnalytics(...a)),
+  getAnalyticsByPayee: (...a) =>
+    impl() === 'mongo' ? mongoGetAnalyticsByPayee(...a) : mysqlGetAnalyticsByPayee(...a),
+  getCashSummary: (...a) => (impl() === 'mongo' ? mongoGetCashSummary(...a) : mysqlGetCashSummary(...a)),
   getCategories: (...a) => (impl() === 'mongo' ? mongoGetCategories(...a) : mysqlGetCategories(...a)),
   findExistingFingerprints: (...a) =>
     impl() === 'mongo' ? mongoFindExistingFingerprints(...a) : mysqlFindExistingFingerprints(...a),

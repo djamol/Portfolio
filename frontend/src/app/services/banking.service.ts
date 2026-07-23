@@ -177,6 +177,34 @@ export class BankingService {
     );
   }
 
+  getAnalyticsByPayee(filters: Record<string, any> = {}): Observable<any[]> {
+    let params = new HttpParams();
+    Object.entries(filters).forEach(([k, v]) => {
+      if (v !== null && v !== undefined && v !== '') params = params.set(k, String(v));
+    });
+    return this.http.get<ApiResponse<any[]>>(`${this.getApiUrl()}/analytics/by-payee`, { params }).pipe(
+      map((r) => (r.success ? r.data : []))
+    );
+  }
+
+  getCashSummary(): Observable<{
+    accounts: Array<{
+      id: number;
+      bank_name: string;
+      account_name: string;
+      currency: string;
+      latest_balance: number;
+      is_active: number;
+    }>;
+    totals_by_currency: Array<{ currency: string; total: number }>;
+    active_count: number;
+    inactive_count: number;
+  } | null> {
+    return this.http.get<ApiResponse<any>>(`${this.getApiUrl()}/cash-summary`).pipe(
+      map((r) => (r.success ? r.data : null))
+    );
+  }
+
   getCategories(): Observable<string[]> {
     return this.http.get<ApiResponse<string[]>>(`${this.getApiUrl()}/categories`).pipe(
       map((r) => (r.success ? r.data : []))
@@ -207,9 +235,10 @@ export class BankingService {
     );
   }
 
-  getBudgetStatus(periodMonth?: string): Observable<BankBudget[]> {
+  getBudgetStatus(periodMonth?: string, opts: { exclude_transfers?: boolean } = {}): Observable<BankBudget[]> {
     let params = new HttpParams();
     if (periodMonth) params = params.set('period_month', periodMonth);
+    if (opts.exclude_transfers) params = params.set('exclude_transfers', '1');
     return this.http.get<ApiResponse<BankBudget[]>>(`${this.getApiUrl()}/budgets/status`, { params }).pipe(
       map((r) => (r.success ? r.data : []))
     );

@@ -223,6 +223,26 @@ router.get('/analytics', async (req, res) => {
   }
 });
 
+router.get('/analytics/by-payee', async (req, res) => {
+  try {
+    const data = await banking.getAnalyticsByPayee(req.query);
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error('Error fetching payee analytics:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+router.get('/cash-summary', async (req, res) => {
+  try {
+    const data = await banking.getCashSummary();
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error('Error fetching cash summary:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 router.get('/accounts/:id/continuity', async (req, res) => {
   try {
     const data = await banking.balanceContinuity(req.params.id);
@@ -245,7 +265,9 @@ router.get('/budgets', async (req, res) => {
 
 router.get('/budgets/status', async (req, res) => {
   try {
-    const rows = await banking.budgetStatus(req.query.period_month);
+    const rows = await banking.budgetStatus(req.query.period_month, {
+      exclude_transfers: req.query.exclude_transfers
+    });
     res.json({ success: true, data: rows });
   } catch (error) {
     console.error('Error fetching budget status:', error);

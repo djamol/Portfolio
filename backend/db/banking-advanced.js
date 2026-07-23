@@ -410,20 +410,46 @@ async function mongoDeleteBudget(id) {
   return result.deletedCount > 0;
 }
 
-async function mysqlBudgetStatus(periodMonth) {
+function wantsExcludeTransfers(opts = {}) {
+  const v = opts.exclude_transfers;
+  return v === true || v === 1 || v === '1' || v === 'true';
+}
+
+function isTransferTxn(r) {
+  return (
+    r.category === 'Transfer In' ||
+    r.category === 'Transfer Out' ||
+    (r.linked_transfer_id !== null && r.linked_transfer_id !== undefined)
+  );
+}
+
+function spentForBudget(spentRows, budget) {
+  const cat = budget.category;
+  const accountId = budget.account_id != null ? Number(budget.account_id) : null;
+  return spentRows
+    .filter((r) => (r.category || 'Uncategorized') === cat)
+    .filter((r) => (accountId == null ? true : Number(r.account_id) === accountId))
+    .reduce((s, r) => s + num(r.spent), 0);
+}
+
+async function mysqlBudgetStatus(periodMonth, opts = {}) {
   const pool = getPool();
   const month = periodMonth || new Date().toISOString().slice(0, 7);
   const budgets = await mysqlGetBudgets(month);
+  let transferClause = '';
+  if (wantsExcludeTransfers(opts)) {
+    transferClause =
+      ` AND NOT (category IN ('Transfer In','Transfer Out') OR linked_transfer_id IS NOT NULL)`;
+  }
   const [spentRows] = await pool.query(
-    `SELECT category, COALESCE(SUM(withdrawal),0) AS spent
+    `SELECT category, account_id, COALESCE(SUM(withdrawal),0) AS spent
      FROM bank_transactions
-     WHERE DATE_FORMAT(txn_date, '%Y-%m') = ? AND withdrawal > 0
-     GROUP BY category`,
+     WHERE DATE_FORMAT(txn_date, '%Y-%m') = ? AND withdrawal > 0${transferClause}
+     GROUP BY category, account_id`,
     [month]
   );
-  const spentMap = Object.fromEntries(spentRows.map((r) => [r.category, num(r.spent)]));
   return budgets.map((b) => {
-    const spent = spentMap[b.category] || 0;
+    const spent = spentForBudget(spentRows, b);
     return {
       ...b,
       period_month: b.period_month || month,
@@ -434,21 +460,30 @@ async function mysqlBudgetStatus(periodMonth) {
   });
 }
 
-async function mongoBudgetStatus(periodMonth) {
+async function mongoBudgetStatus(periodMonth, opts = {}) {
   const db = getMongoDb();
   const month = periodMonth || new Date().toISOString().slice(0, 7);
   const budgets = await mongoGetBudgets(month);
-  const rows = await db
-    .collection('bank_transactions')
-    .find({ txn_date: { $gte: `${month}-01`, $lte: `${month}-31` }, withdrawal: { $gt: 0 } })
-    .toArray();
+  const query = {
+    txn_date: { $gte: `${month}-01`, $lte: `${month}-31` },
+    withdrawal: { $gt: 0 }
+  };
+  let rows = await db.collection('bank_transactions').find(query).toArray();
+  if (wantsExcludeTransfers(opts)) {
+    rows = rows.filter((r) => !isTransferTxn(r));
+  }
   const spentMap = {};
   for (const r of rows) {
     const c = r.category || 'Uncategorized';
-    spentMap[c] = (spentMap[c] || 0) + num(r.withdrawal);
+    const key = `${c}::${r.account_id}`;
+    spentMap[key] = (spentMap[key] || 0) + num(r.withdrawal);
   }
+  const spentRows = Object.entries(spentMap).map(([key, spent]) => {
+    const [category, account_id] = key.split('::');
+    return { category, account_id: Number(account_id), spent };
+  });
   return budgets.map((b) => {
-    const spent = spentMap[b.category] || 0;
+    const spent = spentForBudget(spentRows, b);
     return {
       ...b,
       period_month: b.period_month || month,

@@ -49,12 +49,27 @@
     </select>
     <input type="number" min="0" placeholder="Min amount" [(ngModel)]="filterMinAmount" *ngIf="activeTab==='transactions'" class="min-amt" />
     <input type="search" placeholder="Search narration / ref" [(ngModel)]="filterQ" *ngIf="activeTab==='transactions'" (keyup.enter)="applyFilters()" />
+    <label class="chk-inline" title="Hide Transfer In/Out and linked cross-account moves from spend analytics and budgets">
+      <input type="checkbox" [(ngModel)]="excludeTransfers" (ngModelChange)="applyFilters()" />
+      Exclude transfers
+    </label>
     <button class="btn btn-primary" (click)="applyFilters()">Apply</button>
     <button class="btn btn-secondary" (click)="clearFilters()">Clear</button>
   </div>
 
   <!-- OVERVIEW -->
   <section *ngIf="activeTab==='overview'">
+    <div class="stat-grid" *ngIf="cashSummary?.totals_by_currency?.length">
+      <div class="stat-card" *ngFor="let t of cashSummary!.totals_by_currency">
+        <div class="stat-label">Cash position ({{ t.currency }})</div>
+        <div class="stat-value">{{ formatCurrency(t.total, t.currency) }}</div>
+      </div>
+      <div class="stat-card" *ngIf="cashSummary">
+        <div class="stat-label">Active accounts</div>
+        <div class="stat-value">{{ cashSummary.active_count }}</div>
+      </div>
+    </div>
+
     <div class="stat-grid">
       <div class="stat-card">
         <div class="stat-label">Accounts</div>
@@ -109,19 +124,40 @@
       </div>
     </div>
 
-    <div class="card" *ngIf="budgets.length || true">
-      <h3>Budgets (this month)</h3>
+    <div class="card">
+      <div class="section-actions wrap" style="margin-bottom: 0.75rem;">
+        <h3 style="margin: 0; flex: 1;">Budgets</h3>
+        <label class="inline-label">
+          Month
+          <input type="month" [(ngModel)]="budgetMonth" (ngModelChange)="onBudgetMonthChange()" />
+        </label>
+      </div>
       <div class="form-grid" style="margin-bottom: 1rem;">
         <div class="form-group">
           <label>Category</label>
-          <select [(ngModel)]="budgetForm.category">
-            <option value="">Select…</option>
-            <option *ngFor="let c of categories" [value]="c">{{ c }}</option>
-          </select>
+          <input list="budget-category-list" [(ngModel)]="budgetForm.category" placeholder="Select or type…" />
+          <datalist id="budget-category-list">
+            <option *ngFor="let c of categories" [value]="c"></option>
+          </datalist>
         </div>
         <div class="form-group">
           <label>Amount</label>
           <input type="number" [(ngModel)]="budgetForm.amount" min="0" />
+        </div>
+        <div class="form-group">
+          <label>Month</label>
+          <input type="month" [(ngModel)]="budgetForm.period_month" />
+        </div>
+        <div class="form-group">
+          <label>Account (optional)</label>
+          <select [(ngModel)]="budgetForm.account_id">
+            <option [ngValue]="null">All accounts</option>
+            <option *ngFor="let a of accounts" [ngValue]="a.id">{{ a.bank_name }} – {{ a.account_name }}</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Notes</label>
+          <input [(ngModel)]="budgetForm.notes" placeholder="Optional" />
         </div>
         <div class="form-group">
           <label>&nbsp;</label>
@@ -132,6 +168,8 @@
         <thead>
           <tr>
             <th>Category</th>
+            <th>Month</th>
+            <th>Account</th>
             <th>Budget</th>
             <th>Spent</th>
             <th>Remaining</th>
@@ -142,6 +180,8 @@
         <tbody>
           <tr *ngFor="let b of budgets">
             <td>{{ b.category }}</td>
+            <td>{{ b.period_month || budgetMonth }}</td>
+            <td>{{ accountLabel(b.account_id) }}</td>
             <td>₹{{ formatMoney(b.amount) }}</td>
             <td class="debit">₹{{ formatMoney(b.spent) }}</td>
             <td [class.credit]="(b.remaining||0)>=0" [class.debit]="(b.remaining||0)<0">₹{{ formatMoney(b.remaining) }}</td>
@@ -638,7 +678,7 @@
     </p>
 
     <div class="card" *ngIf="showRuleForm">
-      <h3>New category rule</h3>
+      <h3>{{ editingRuleId ? 'Edit category rule' : 'New category rule' }}</h3>
       <div class="form-grid">
         <div class="form-group">
           <label>Pattern</label>
@@ -653,18 +693,33 @@
         </div>
         <div class="form-group">
           <label>Category</label>
-          <select [(ngModel)]="ruleForm.category">
-            <option *ngFor="let c of categories" [value]="c">{{ c }}</option>
-          </select>
+          <input list="rule-category-list" [(ngModel)]="ruleForm.category" placeholder="Select or type…" />
+          <datalist id="rule-category-list">
+            <option *ngFor="let c of categories" [value]="c"></option>
+          </datalist>
         </div>
         <div class="form-group">
           <label>Priority (lower = first)</label>
           <input type="number" [(ngModel)]="ruleForm.priority" />
         </div>
+        <div class="form-group">
+          <label>Account</label>
+          <select [(ngModel)]="ruleForm.account_id">
+            <option [ngValue]="null">All accounts</option>
+            <option *ngFor="let a of accounts" [ngValue]="a.id">{{ a.bank_name }} – {{ a.account_name }}</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Active</label>
+          <label class="chk-inline">
+            <input type="checkbox" [ngModel]="isRuleActive(ruleForm)" (ngModelChange)="ruleForm.is_active = $event ? 1 : 0" />
+            Enabled
+          </label>
+        </div>
       </div>
       <div class="section-actions">
-        <button class="btn btn-primary" (click)="saveRule()">Save rule</button>
-        <button class="btn btn-secondary" (click)="showRuleForm=false">Cancel</button>
+        <button class="btn btn-primary" (click)="saveRule()">{{ editingRuleId ? 'Update rule' : 'Save rule' }}</button>
+        <button class="btn btn-secondary" (click)="showRuleForm=false; editingRuleId=null">Cancel</button>
       </div>
     </div>
 
@@ -676,16 +731,27 @@
             <th>Pattern</th>
             <th>Field</th>
             <th>Category</th>
+            <th>Account</th>
+            <th>Active</th>
             <th></th>
           </tr>
         </thead>
         <tbody>
-          <tr *ngFor="let r of rules">
+          <tr *ngFor="let r of rules" [class.inactive-row]="!isRuleActive(r)">
             <td>{{ r.priority }}</td>
             <td><code>{{ r.pattern }}</code></td>
             <td>{{ r.match_field }}</td>
             <td>{{ r.category }}</td>
-            <td><button class="link-btn danger" (click)="deleteRule(r)">Delete</button></td>
+            <td>{{ accountLabel(r.account_id) }}</td>
+            <td>
+              <button class="link-btn" type="button" (click)="toggleRuleActive(r)">
+                {{ isRuleActive(r) ? 'On' : 'Off' }}
+              </button>
+            </td>
+            <td class="row-actions">
+              <button class="link-btn" type="button" (click)="editRule(r)">Edit</button>
+              <button class="link-btn danger" type="button" (click)="deleteRule(r)">Delete</button>
+            </td>
           </tr>
         </tbody>
       </table>
@@ -707,6 +773,17 @@
       <button class="btn btn-secondary" (click)="checkContinuity()" [disabled]="!continuityAccountId">Check balance continuity</button>
     </div>
 
+    <div class="stat-grid" *ngIf="cashSummary?.totals_by_currency?.length">
+      <div class="stat-card" *ngFor="let t of cashSummary!.totals_by_currency">
+        <div class="stat-label">Cash position ({{ t.currency }})</div>
+        <div class="stat-value">{{ formatCurrency(t.total, t.currency) }}</div>
+      </div>
+      <div class="stat-card" *ngIf="cashSummary">
+        <div class="stat-label">Active / inactive</div>
+        <div class="stat-value">{{ cashSummary.active_count }} / {{ cashSummary.inactive_count }}</div>
+      </div>
+    </div>
+
     <div class="stat-grid" *ngIf="forecast?.projected_next_month">
       <div class="stat-card">
         <div class="stat-label">Projected {{ forecast.projected_next_month.month }} credits</div>
@@ -724,6 +801,32 @@
         <div class="stat-label">Projected interest</div>
         <div class="stat-value">₹{{ formatMoney(forecast.projected_next_month.projected_interest) }}</div>
       </div>
+    </div>
+
+    <div class="card">
+      <h3>Top merchants / payees</h3>
+      <p class="hint">Ranked by debit in the selected date range. Click a row to open matching transactions.</p>
+      <table class="data-table compact" *ngIf="topPayees.length; else noPayees">
+        <thead>
+          <tr>
+            <th>Payee</th>
+            <th>Times</th>
+            <th>Debit</th>
+            <th>Credit</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr *ngFor="let p of topPayees" class="clickable-row" (click)="filterByPayee(p.payee)">
+            <td>{{ p.payee }}</td>
+            <td>{{ p.txn_count }}</td>
+            <td class="debit">₹{{ formatMoney(p.total_debit) }}</td>
+            <td class="credit">₹{{ formatMoney(p.total_credit) }}</td>
+          </tr>
+        </tbody>
+      </table>
+      <ng-template #noPayees>
+        <p class="empty">No payee data for this range yet.</p>
+      </ng-template>
     </div>
 
     <div class="card">

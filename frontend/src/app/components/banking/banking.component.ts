@@ -56,11 +56,13 @@ export class BankingComponent implements OnInit {
   filterCategory = '';
   filterFlow = '';
   filterQ = '';
+  filterPayee = '';
   filterMinAmount: number | '' = '';
   filterSort = 'date_desc';
   filterLimit = Number(localStorage.getItem('bank-txn-page-size') || 100) || 100;
   filterOffset = 0;
   datePreset: DatePreset = 'all';
+  excludeTransfers = true;
   jumpPage: number | null = null;
   private flashTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -82,18 +84,47 @@ export class BankingComponent implements OnInit {
   recategorizeMode: 'auto_only' | 'uncategorized' | 'all' = 'auto_only';
 
   rules: CategoryRule[] = [];
-  ruleForm: CategoryRule = { pattern: '', match_field: 'narration', category: '', priority: 100, is_active: 1 };
+  ruleForm: CategoryRule = {
+    pattern: '',
+    match_field: 'narration',
+    category: '',
+    priority: 100,
+    account_id: null,
+    is_active: 1
+  };
   showRuleForm = false;
+  editingRuleId: number | null = null;
 
   showManualTxn = false;
   manualTxn: Partial<BankTransaction> = this.emptyManualTxn();
 
   budgets: BankBudget[] = [];
-  budgetForm: BankBudget = { category: '', amount: 0, period_month: '' };
+  budgetMonth = new Date().toISOString().slice(0, 7);
+  budgetForm: BankBudget = {
+    category: '',
+    amount: 0,
+    period_month: new Date().toISOString().slice(0, 7),
+    account_id: null,
+    notes: ''
+  };
   recurring: any[] = [];
   forecast: any = null;
   continuity: any = null;
   continuityAccountId: number | '' = '';
+  cashSummary: {
+    accounts: Array<{
+      id: number;
+      bank_name: string;
+      account_name: string;
+      currency: string;
+      latest_balance: number;
+      is_active: number;
+    }>;
+    totals_by_currency: Array<{ currency: string; total: number }>;
+    active_count: number;
+    inactive_count: number;
+  } | null = null;
+  topPayees: any[] = [];
 
   readonly bankSupport = [
     { name: 'HDFC', formats: 'CSV', status: 'Full' },
@@ -320,13 +351,16 @@ export class BankingComponent implements OnInit {
     }
     if (tab === 'rules') this.loadRules();
     if (tab === 'insights') this.loadInsights();
-    if (tab === 'overview') this.loadBudgets();
+    if (tab === 'overview') {
+      this.loadBudgets();
+      this.loadCashSummary();
+    }
   }
 
   refreshAll() {
     this.loading = true;
     this.message = '';
-    let pending = 4;
+    let pending = 5;
     const done = () => {
       pending -= 1;
       if (pending <= 0) this.loading = false;
@@ -356,6 +390,7 @@ export class BankingComponent implements OnInit {
 
     this.loadRules(done);
     this.loadAnalytics(done);
+    this.loadCashSummary(done);
     if (this.activeTab === 'transactions') this.loadTransactions();
     if (this.activeTab === 'insights') this.loadInsights();
     this.loadBudgets();
@@ -373,6 +408,7 @@ export class BankingComponent implements OnInit {
     if (this.filterCategory) filters['category'] = this.filterCategory;
     if (this.filterFlow) filters['flow'] = this.filterFlow;
     if (this.filterQ) filters['q'] = this.filterQ;
+    if (this.filterPayee) filters['payee'] = this.filterPayee;
     if (this.filterMinAmount) filters['min_amount'] = this.filterMinAmount;
     return filters;
   }
@@ -406,6 +442,7 @@ export class BankingComponent implements OnInit {
     if (this.filterAccountId) filters['account_id'] = this.filterAccountId;
     if (this.filterFrom) filters['from'] = this.filterFrom;
     if (this.filterTo) filters['to'] = this.filterTo;
+    if (this.excludeTransfers) filters['exclude_transfers'] = '1';
 
     this.bankingService.getAnalytics(filters).subscribe({
       next: (data) => {
@@ -418,6 +455,37 @@ export class BankingComponent implements OnInit {
       },
       error: (err) => {
         this.flash('error', err.message || 'Failed to load analytics');
+        done?.();
+      }
+    });
+  }
+
+  loadCashSummary(done?: () => void) {
+    this.bankingService.getCashSummary().subscribe({
+      next: (data) => {
+        this.cashSummary = data;
+        done?.();
+      },
+      error: () => {
+        this.cashSummary = null;
+        done?.();
+      }
+    });
+  }
+
+  loadTopPayees(done?: () => void) {
+    const filters: Record<string, any> = { limit: 15 };
+    if (this.filterAccountId) filters['account_id'] = this.filterAccountId;
+    if (this.filterFrom) filters['from'] = this.filterFrom;
+    if (this.filterTo) filters['to'] = this.filterTo;
+    if (this.excludeTransfers) filters['exclude_transfers'] = '1';
+    this.bankingService.getAnalyticsByPayee(filters).subscribe({
+      next: (rows) => {
+        this.topPayees = rows || [];
+        done?.();
+      },
+      error: () => {
+        this.topPayees = [];
         done?.();
       }
     });
@@ -680,11 +748,24 @@ export class BankingComponent implements OnInit {
     this.filterCategory = '';
     this.filterFlow = '';
     this.filterQ = '';
+    this.filterPayee = '';
     this.filterMinAmount = '';
     this.filterSort = 'date_desc';
     this.filterOffset = 0;
     this.datePreset = 'all';
+    this.excludeTransfers = true;
     this.applyFilters();
+  }
+
+  filterByPayee(payee: string) {
+    this.filterPayee = payee === 'Unknown' ? '' : payee;
+    this.filterQ = '';
+    this.filterCategory = '';
+    this.filterFlow = '';
+    this.filterOffset = 0;
+    this.activeTab = 'transactions';
+    this.loadTransactions();
+    this.flash('info', payee === 'Unknown' ? 'Opened transactions' : `Filtered by payee: ${payee}`);
   }
 
   goToPage(page: number) {
@@ -840,7 +921,28 @@ export class BankingComponent implements OnInit {
   }
 
   openRuleForm() {
-    this.ruleForm = { pattern: '', match_field: 'narration', category: '', priority: 100, is_active: 1 };
+    this.editingRuleId = null;
+    this.ruleForm = {
+      pattern: '',
+      match_field: 'narration',
+      category: '',
+      priority: 100,
+      account_id: null,
+      is_active: 1
+    };
+    this.showRuleForm = true;
+  }
+
+  editRule(rule: CategoryRule) {
+    this.editingRuleId = rule.id || null;
+    this.ruleForm = {
+      pattern: rule.pattern,
+      match_field: rule.match_field || 'narration',
+      category: rule.category,
+      priority: rule.priority ?? 100,
+      account_id: rule.account_id ?? null,
+      is_active: rule.is_active === 0 || rule.is_active === false ? 0 : 1
+    };
     this.showRuleForm = true;
   }
 
@@ -849,14 +951,45 @@ export class BankingComponent implements OnInit {
       this.flash('error', 'Pattern and category are required');
       return;
     }
-    this.bankingService.createRule(this.ruleForm).subscribe({
+    const payload: CategoryRule = {
+      ...this.ruleForm,
+      account_id: this.ruleForm.account_id || null,
+      is_active: this.ruleForm.is_active === 0 || this.ruleForm.is_active === false ? 0 : 1
+    };
+    const wasEdit = !!this.editingRuleId;
+    const req$ = this.editingRuleId
+      ? this.bankingService.updateRule(this.editingRuleId, payload)
+      : this.bankingService.createRule(payload);
+    req$.subscribe({
       next: () => {
         this.showRuleForm = false;
-        this.flash('success', 'Rule created');
+        this.editingRuleId = null;
+        this.flash('success', wasEdit ? 'Rule updated' : 'Rule created');
         this.loadRules();
       },
       error: (err) => this.flash('error', err.message || 'Failed to save rule')
     });
+  }
+
+  toggleRuleActive(rule: CategoryRule) {
+    if (!rule.id) return;
+    const nextActive = rule.is_active === 0 || rule.is_active === false ? 1 : 0;
+    this.bankingService
+      .updateRule(rule.id, {
+        pattern: rule.pattern,
+        match_field: rule.match_field || 'narration',
+        category: rule.category,
+        priority: rule.priority ?? 100,
+        account_id: rule.account_id ?? null,
+        is_active: nextActive
+      })
+      .subscribe({
+        next: () => {
+          this.flash('success', nextActive ? 'Rule activated' : 'Rule deactivated');
+          this.loadRules();
+        },
+        error: (err) => this.flash('error', err.message || 'Failed to update rule')
+      });
   }
 
   deleteRule(rule: CategoryRule) {
@@ -871,12 +1004,19 @@ export class BankingComponent implements OnInit {
   }
 
   loadBudgets() {
-    const month = new Date().toISOString().slice(0, 7);
+    const month = this.budgetMonth || new Date().toISOString().slice(0, 7);
     this.budgetForm.period_month = this.budgetForm.period_month || month;
-    this.bankingService.getBudgetStatus(month).subscribe({
-      next: (rows) => (this.budgets = rows),
-      error: () => (this.budgets = [])
-    });
+    this.bankingService
+      .getBudgetStatus(month, { exclude_transfers: this.excludeTransfers })
+      .subscribe({
+        next: (rows) => (this.budgets = rows),
+        error: () => (this.budgets = [])
+      });
+  }
+
+  onBudgetMonthChange() {
+    this.budgetForm.period_month = this.budgetMonth;
+    this.loadBudgets();
   }
 
   saveBudget() {
@@ -884,13 +1024,21 @@ export class BankingComponent implements OnInit {
       this.flash('error', 'Category and amount required');
       return;
     }
-    this.bankingService.saveBudget(this.budgetForm).subscribe({
+    const payload: BankBudget = {
+      ...this.budgetForm,
+      period_month: this.budgetForm.period_month || this.budgetMonth,
+      account_id: this.budgetForm.account_id || null,
+      notes: this.budgetForm.notes || null
+    };
+    this.bankingService.saveBudget(payload).subscribe({
       next: () => {
         this.flash('success', 'Budget saved');
         this.budgetForm = {
           category: '',
           amount: 0,
-          period_month: new Date().toISOString().slice(0, 7)
+          period_month: this.budgetMonth,
+          account_id: null,
+          notes: ''
         };
         this.loadBudgets();
       },
@@ -919,6 +1067,18 @@ export class BankingComponent implements OnInit {
       next: (data) => (this.forecast = data),
       error: () => (this.forecast = null)
     });
+    this.loadCashSummary();
+    this.loadTopPayees();
+  }
+
+  accountLabel(accountId?: number | null): string {
+    if (!accountId) return 'All accounts';
+    const a = this.accounts.find((x) => x.id === Number(accountId));
+    return a ? `${a.bank_name} – ${a.account_name}` : `#${accountId}`;
+  }
+
+  isRuleActive(rule: CategoryRule): boolean {
+    return !(rule.is_active === 0 || rule.is_active === false);
   }
 
   runTransferMatch() {
