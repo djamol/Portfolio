@@ -55,7 +55,7 @@ function parseBankDate(value) {
   const raw = String(value).trim();
   if (!raw || raw === '-') return null;
 
-  let m = raw.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+  let m = raw.match(/^(\d{1,2})[\/\-,\.](\d{1,2})[\/\-,\.](\d{2,4})$/);
   if (m) {
     return ymdFromParts(m[1], m[2], m[3]);
   }
@@ -63,8 +63,8 @@ function parseBankDate(value) {
   m = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (m) return raw.slice(0, 10);
 
-  // 01-May-2022 / 01/May/2022
-  m = raw.match(/^(\d{1,2})[\/\-]([A-Za-z]{3,9})[\/\-](\d{2,4})$/);
+  // 01-May-2022 / 01/May/2022 / 01,May,2022
+  m = raw.match(/^(\d{1,2})[\/\-,\.]([A-Za-z]{3,9})[\/\-,\.](\d{2,4})$/);
   if (m) {
     const mi = MONTH_MAP[m[2].toLowerCase()];
     if (mi) return ymdFromParts(m[1], mi, m[3]);
