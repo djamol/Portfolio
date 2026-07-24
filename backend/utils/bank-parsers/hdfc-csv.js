@@ -1,4 +1,5 @@
 const { parse } = require('csv-parse/sync');
+const XLSX = require('xlsx');
 const {
   normalizeWhitespace,
   parseIndianAmount,
@@ -21,6 +22,7 @@ function isPageNoise(row) {
   const cells = row.map((c) => normalizeWhitespace(c));
   const joined = cells.join(' ').toLowerCase();
   if (!joined) return true;
+  if (/^\*+$/.test(cells[0] || '') || /^\*{5,}/.test(joined.replace(/\s+/g, ''))) return true;
   if (/^page\s+\d+\s+of\s+\d+$/i.test(joined)) return true;
   if (joined.includes('generation date')) return true;
   if (joined.includes('closing balance includes funds')) return true;
@@ -29,6 +31,7 @@ function isPageNoise(row) {
   if (joined.includes('hdfc bank gstin')) return true;
   if (joined.includes('state account branch gstin')) return true;
   if (joined.includes('hdfc bank limited') && cells.filter(Boolean).length <= 3) return true;
+  if (joined.includes('statement of accounts') && joined.includes('page no')) return true;
   if (joined.includes('account branch')) return true;
   if (joined.startsWith('joint holders')) return true;
   if (joined.includes('statement from')) return true;
@@ -36,9 +39,14 @@ function isPageNoise(row) {
   if (/^address$/i.test(cells[2] || '') || /^city$/i.test(cells[2] || '')) return true;
   if (/^mr\.?$|^mrs\.?$|^ms\.?$/i.test(cells[0] || '') && cells[1]) return true;
   // Account meta rows scattered through pages
-  if (cells.includes('Account number') || cells.includes('A/C Open Date') || cells.includes('Account Status')) return true;
+  if (cells.includes('Account number') || cells.includes('A/C Open Date') || cells.includes('Account Status')) {
+    return true;
+  }
   if (cells.includes('Cust ID') || cells.includes('RTGS/NEFT IFSC') || cells.includes('Phone No.')) return true;
   if (cells.includes('Email') && cells.includes('Limit')) return true;
+  if (/account no\s*:/i.test(joined) && /virtual|preferred|savings|current/i.test(joined)) return true;
+  if (/a\/c open date/i.test(joined) || /account status\s*:/i.test(joined)) return true;
+  if (/rtgs\/neft ifsc/i.test(joined)) return true;
   return false;
 }
 
@@ -52,9 +60,12 @@ function extractAccountMeta(rows) {
   };
 
   for (const row of rows.slice(0, 100)) {
+    const cells = row.map((c) => normalizeWhitespace(c));
+    const joined = cells.filter(Boolean).join(' ');
+
     for (let i = 0; i < row.length; i++) {
-      const cell = normalizeWhitespace(row[i]);
-      const next = normalizeWhitespace(row[i + 1]);
+      const cell = cells[i];
+      const next = cells[i + 1];
       if (/^account number$/i.test(cell) && next) {
         meta.accountNumber = next.replace(/^:\s*/, '');
       }
@@ -65,13 +76,39 @@ function extractAccountMeta(rows) {
         meta.customerName = next;
       }
       if (/Statement From/i.test(cell)) {
-        const m = `${cell} ${next} ${normalizeWhitespace(row[i + 2])} ${normalizeWhitespace(row[i + 3])}`.match(
-          /(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}).{0,20}?(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4})/i
+        const m = `${cell} ${next} ${cells[i + 2] || ''} ${cells[i + 3] || ''}`.match(
+          /(\d{1,2}[\/\-,\.]\d{1,2}[\/\-,\.]\d{2,4}).{0,40}?(\d{1,2}[\/\-,\.]\d{1,2}[\/\-,\.]\d{2,4})/i
         );
         if (m) {
           meta.statementFrom = parseBankDate(m[1]);
           meta.statementTo = parseBankDate(m[2]);
         }
+      }
+    }
+
+    // Excel often packs labels into one cell: "Account No :5010… VIRTUAL PREFERRED"
+    if (!meta.accountNumber) {
+      const acct = joined.match(/Account\s*(?:No|Number)\s*:?\s*(\d{9,18})/i);
+      if (acct) meta.accountNumber = acct[1];
+    }
+    if (!meta.ifsc) {
+      const ifsc = joined.match(/RTGS\/NEFT\s*IFSC\s*:?\s*([A-Z]{4}0[A-Z0-9]{6})/i);
+      if (ifsc) meta.ifsc = ifsc[1].toUpperCase();
+    }
+    if (!meta.customerName) {
+      const first = cells[0] || '';
+      const name = first.match(/^(?:MR\.?|MRS\.?|MS\.?)\s+(.+)$/i);
+      if (name && name[1].trim().length > 2 && !/address|nomination|joint/i.test(name[1])) {
+        meta.customerName = name[1].trim();
+      }
+    }
+    if (!meta.statementFrom) {
+      const period = joined.match(
+        /Statement\s+From\s*:?\s*(\d{1,2}[\/\-,\.]\d{1,2}[\/\-,\.]\d{2,4}).{0,40}?To\s*:?\s*(\d{1,2}[\/\-,\.]\d{1,2}[\/\-,\.]\d{2,4})/i
+      );
+      if (period) {
+        meta.statementFrom = parseBankDate(period[1]);
+        meta.statementTo = parseBankDate(period[2]);
       }
     }
   }
@@ -91,17 +128,7 @@ function looksLikeNewNarration(text) {
   );
 }
 
-function parseHdfcCsv(bufferOrString, accountId) {
-  const text = Buffer.isBuffer(bufferOrString)
-    ? bufferOrString.toString('utf8')
-    : String(bufferOrString);
-
-  const rows = parse(text, {
-    relax_column_count: true,
-    skip_empty_lines: false,
-    trim: true
-  });
-
+function parseHdfcRows(rows, accountId) {
   const meta = extractAccountMeta(rows);
   const transactions = [];
   let started = false;
@@ -172,7 +199,6 @@ function parseHdfcCsv(bufferOrString, accountId) {
         narration = pendingNarration;
         pendingNarration = '';
       } else if (pendingNarration && narrationFromRow) {
-        // Prefer row narration; keep pending only if it clearly belongs ahead — usually consume into row
         narration = normalizeWhitespace(`${pendingNarration} ${narration}`);
         pendingNarration = '';
       }
@@ -209,17 +235,71 @@ function parseHdfcCsv(bufferOrString, accountId) {
   };
 }
 
-function detectHdfc(text) {
-  const sample = String(text || '').slice(0, 8000).toLowerCase();
-  return (
-    sample.includes('withdrawal amount') &&
-    sample.includes('deposit amount') &&
-    (sample.includes('closing balance') || sample.includes('hdfc') || sample.includes('narration'))
-  );
+function parseHdfcCsv(bufferOrString, accountId) {
+  const text = Buffer.isBuffer(bufferOrString)
+    ? bufferOrString.toString('utf8')
+    : String(bufferOrString);
+
+  const rows = parse(text, {
+    relax_column_count: true,
+    skip_empty_lines: false,
+    trim: true
+  });
+  return parseHdfcRows(rows, accountId);
+}
+
+function sheetToRows(workbook) {
+  const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  return XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: false });
+}
+
+function parseHdfcXls(buffer, accountId) {
+  const workbook = XLSX.read(buffer, { type: Buffer.isBuffer(buffer) ? 'buffer' : 'binary' });
+  const rows = sheetToRows(workbook);
+  return parseHdfcRows(rows, accountId);
+}
+
+function parseHdfcStatement(buffer, accountId, ext = '.csv') {
+  const e = String(ext || '').toLowerCase();
+  if (e === '.xls' || e === '.xlsx') return parseHdfcXls(buffer, accountId);
+  return parseHdfcCsv(buffer, accountId);
+}
+
+function detectHdfc(textOrBuffer) {
+  let sample = '';
+  if (Buffer.isBuffer(textOrBuffer)) {
+    try {
+      const workbook = XLSX.read(textOrBuffer, { type: 'buffer' });
+      const rows = sheetToRows(workbook).slice(0, 40);
+      sample = rows
+        .map((r) => r.join('|'))
+        .join('\n')
+        .toLowerCase();
+    } catch {
+      sample = textOrBuffer.toString('utf8', 0, Math.min(textOrBuffer.length, 8000)).toLowerCase();
+    }
+  } else {
+    sample = String(textOrBuffer || '')
+      .slice(0, 8000)
+      .toLowerCase();
+  }
+
+  const hasCols =
+    sample.includes('withdrawal') &&
+    sample.includes('deposit') &&
+    (sample.includes('closing balance') || sample.includes('narration'));
+  const hasHdfc =
+    sample.includes('hdfc') ||
+    sample.includes('acct_statement') ||
+    /account\s*(?:no|number)\s*:?\s*\d{9,}/i.test(sample);
+  return hasCols && (hasHdfc || (sample.includes('date') && sample.includes('narration')));
 }
 
 module.exports = {
   parseHdfcCsv,
+  parseHdfcXls,
+  parseHdfcStatement,
   detectHdfc,
-  extractAccountMeta
+  extractAccountMeta,
+  parseHdfcRows
 };

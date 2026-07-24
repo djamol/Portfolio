@@ -128,7 +128,7 @@ export class BankingComponent implements OnInit {
   topPayees: any[] = [];
 
   readonly bankSupport = [
-    { name: 'HDFC', formats: 'CSV', status: 'Full' },
+    { name: 'HDFC', formats: 'CSV / Excel', status: 'Full' },
     { name: 'ICICI', formats: 'XLS / XLSX', status: 'Full' },
     { name: 'DCB', formats: 'XLS / XLSX', status: 'Full' },
     { name: 'SBI', formats: 'CSV / Excel', status: 'Generic+' },

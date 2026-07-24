@@ -1,5 +1,5 @@
 const path = require('path');
-const { parseHdfcCsv, detectHdfc } = require('./hdfc-csv');
+const { parseHdfcCsv, parseHdfcXls, parseHdfcStatement, detectHdfc } = require('./hdfc-csv');
 const { parseIciciXls, detectIcici } = require('./icici-xls');
 const { parseDcbXls, detectDcb } = require('./dcb-xls');
 const { detectSbi, parseSbiStatement } = require('./sbi');
@@ -26,7 +26,7 @@ function normalizeBankHint(bankHint) {
 function parseByHint(hint, buffer, accountId, ext, options) {
   switch (hint) {
     case 'HDFC':
-      return parseHdfcCsv(buffer, accountId);
+      return parseHdfcStatement(buffer, accountId, ext);
     case 'DCB':
       return parseDcbXls(buffer, accountId, options);
     case 'ICICI':
@@ -67,6 +67,8 @@ function parseBankStatement({ buffer, filename, accountId, bankHint, accountNumb
   if (!result) {
     if (ext === '.csv' && detectHdfc(textPreview)) {
       result = parseHdfcCsv(buffer, accountId);
+    } else if (isExcel && detectHdfc(buffer)) {
+      result = parseHdfcXls(buffer, accountId);
     } else if (isExcel && detectDcb(buffer)) {
       result = parseDcbXls(buffer, accountId, options);
     } else if (isExcel && detectAxis(buffer)) {
@@ -91,7 +93,8 @@ function parseBankStatement({ buffer, filename, accountId, bankHint, accountNumb
         else result = parseGenericCsv(buffer, accountId);
       } catch (csvErr) {
         try {
-          if (detectAxis(buffer)) result = parseAxisStatement(buffer, accountId, '.xls');
+          if (detectHdfc(buffer)) result = parseHdfcXls(buffer, accountId);
+          else if (detectAxis(buffer)) result = parseAxisStatement(buffer, accountId, '.xls');
           else if (detectDcb(buffer)) result = parseDcbXls(buffer, accountId, options);
           else result = parseIciciXls(buffer, accountId);
         } catch {
@@ -131,6 +134,7 @@ function parseBankStatement({ buffer, filename, accountId, bankHint, accountNumb
 module.exports = {
   parseBankStatement,
   parseHdfcCsv,
+  parseHdfcXls,
   parseIciciXls,
   parseDcbXls,
   parseGenericCsv,
